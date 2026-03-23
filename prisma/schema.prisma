@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Instructor {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  shifts    Shift[]
+  schedules Schedule[]
+
+  @@map("instructors")
+}
+
+model Shift {
+  id           String   @id @default(uuid())
+  instructorId String   @map("instructor_id")
+  startTime    DateTime @map("start_time")
+  endTime      DateTime @map("end_time")
+
+  instructor Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@map("shifts")
+}
+
+// 5大業務を統合したスケジュール管理
+model Schedule {
+  id              String   @id @default(uuid())
+  category        String   // study_group, first_consult, live_talk, line_reply, column
+  title           String?
+  instructorId    String   @map("instructor_id")
+  participantName String?  @map("participant_name") // 参加者名（初回コンサル等）
+  scheduledAt     DateTime @map("scheduled_at")
+  endAt           DateTime? @map("end_at")
+  memo            String?
+  status          String   @default("scheduled") // scheduled, completed, canceled
+  isRecurring     Boolean  @default(false) @map("is_recurring")
+  recurrenceRule  String?  @map("recurrence_rule")
+  recurrenceEnd   DateTime? @map("recurrence_end_date")
+  recurrenceGroupId String? @map("recurrence_group_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  instructor Instructor @relation(fields: [instructorId], references: [id])
+
+  @@map("schedules")
+}
+
+// 業務別ローテーション設定（初回コンサル・ライン返信など）
+model RotationSetting {
+  id              String @id @default(uuid())
+  category        String @default("first_consult") // first_consult, line_reply
+  dayOfWeek       Int    @map("day_of_week")    // 0=日,1=月,...6=土
+  startTime       String @map("start_time")     // "21:00"（任意）
+  endTime         String @map("end_time")       // "22:00"（任意）
+  instructorOrder String @map("instructor_order") // カンマ区切りの講師ID順
+  startDate       String @map("start_date")     // ローテ開始日
+  weeksToGenerate Int    @default(12) @map("weeks_to_generate")
+
+  @@map("rotation_settings")
+}
+
+// LINE通知タイミング設定
+model NotificationSetting {
+  id        String @id @default(uuid())
+  timing    String // e.g. "same_day_morning", "1_day_before", "2_days_before"
+  timeOfDay String @default("09:00") @map("time_of_day") // 通知時刻 HH:MM
+  enabled   Boolean @default(true)
+
+  @@map("notification_settings")
+}
