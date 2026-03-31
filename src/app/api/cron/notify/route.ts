@@ -15,11 +15,14 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 今日の日付範囲
+  // 今日の日付範囲 (JSTベースで計算)
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart);
-  todayEnd.setDate(todayEnd.getDate() + 1);
+  const jstOffset = 9 * 60 * 60 * 1000;
+  const nowJST = new Date(now.getTime() + jstOffset);
+
+  // JSTにおける今日の始まり (00:00 JST) をUTCとしてDateオブジェクトにする (-9時間でUTCに戻す)
+  const todayStart = new Date(Date.UTC(nowJST.getUTCFullYear(), nowJST.getUTCMonth(), nowJST.getUTCDate(), -9, 0, 0));
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
   // 今日の予定を取得
   const schedules = await prisma.schedule.findMany({
@@ -42,9 +45,9 @@ export async function GET(req: NextRequest) {
       byInstructor[s.instructorId] = { name: s.instructor.name, items: [] };
     }
     const cat = getCategoryInfo(s.category);
-    const time = s.endAt
-      ? `${new Date(s.scheduledAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}〜${new Date(s.endAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`
-      : "";
+    const startStr = new Date(s.scheduledAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
+    const endStr = s.endAt ? new Date(s.endAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" }) : "";
+    const time = s.endAt ? `${startStr}〜${endStr}` : startStr;
     byInstructor[s.instructorId].items.push(
       `  ${cat.label}${time ? ` (${time})` : ""}${s.participantName ? ` / ${s.participantName}` : ""}`
     );
@@ -52,6 +55,7 @@ export async function GET(req: NextRequest) {
 
   // メッセージ組み立て
   const dateStr = todayStart.toLocaleDateString("ja-JP", {
+    timeZone: "Asia/Tokyo",
     year: "numeric", month: "long", day: "numeric", weekday: "short",
   });
 

@@ -100,7 +100,7 @@ function CellDropdown({
                 className={`flex-1 rounded px-1.5 py-0.5 text-xs font-medium truncate ${cat.color} flex items-center gap-0.5 text-left hover:opacity-80`}
                 title={
                   s.scheduledAt
-                    ? `${cat.label}${s.endAt ? `\n${new Date(s.scheduledAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}〜${new Date(s.endAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}` : ""}\nクリックで編集`
+                    ? `${cat.label}\n${new Date(s.scheduledAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}${s.endAt ? `〜${new Date(s.endAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}` : ""}\nクリックで編集`
                     : `${cat.label}\nクリックで編集`
                 }
               >

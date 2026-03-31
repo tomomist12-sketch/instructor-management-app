@@ -46,11 +46,11 @@ export default async function ConsultsPage() {
                   {upcoming.map((c) => (
                     <tr key={c.id} className="border-b hover:bg-accent/50">
                       <td className="p-2">
-                        {new Date(c.scheduledAt).toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" })}
+                        {new Date(c.scheduledAt).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "short", day: "numeric", weekday: "short" })}
                       </td>
                       <td className="p-2">
-                        {new Date(c.scheduledAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
-                        {c.endAt && ` - ${new Date(c.endAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`}
+                        {new Date(c.scheduledAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}
+                        {c.endAt && ` - ${new Date(c.endAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}`}
                       </td>
                       <td className="p-2 font-medium">{c.instructor.name}</td>
                       <td className="p-2 text-muted-foreground">{c.participantName || "—"}</td>
@@ -79,7 +79,7 @@ export default async function ConsultsPage() {
                   {past.map((c) => (
                     <tr key={c.id} className="border-b">
                       <td className="p-2">
-                        {new Date(c.scheduledAt).toLocaleDateString("ja-JP", { month: "short", day: "numeric" })}
+                        {new Date(c.scheduledAt).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "short", day: "numeric" })}
                       </td>
                       <td className="p-2">{c.instructor.name}</td>
                       <td className="p-2 text-muted-foreground">{c.participantName || "—"}</td>

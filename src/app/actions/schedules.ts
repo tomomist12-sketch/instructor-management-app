@@ -6,13 +6,21 @@ import { sendLineNotification } from "@/lib/line";
 import { getCategoryInfo } from "@/lib/categories";
 import { randomUUID } from "crypto";
 
+function parseJSTDate(dateStr: string | null): Date | null {
+  if (!dateStr) return null;
+  if (dateStr.length === 16 && !dateStr.includes("Z") && !dateStr.includes("+")) {
+    return new Date(`${dateStr}+09:00`);
+  }
+  return new Date(dateStr);
+}
+
 export async function createSchedule(formData: FormData) {
   const category = formData.get("category") as string;
   const title = (formData.get("title") as string) || null;
   const instructorId = formData.get("instructorId") as string;
   const participantName = (formData.get("participantName") as string) || null;
-  const scheduledAt = new Date(formData.get("scheduledAt") as string);
-  const endAt = formData.get("endAt") ? new Date(formData.get("endAt") as string) : null;
+  const scheduledAt = parseJSTDate(formData.get("scheduledAt") as string)!;
+  const endAt = parseJSTDate(formData.get("endAt") as string);
   const memo = (formData.get("memo") as string) || null;
 
   const repeat = (formData.get("repeat") as string) || "none";
@@ -59,8 +67,8 @@ export async function updateSchedule(id: string, formData: FormData) {
   if (formData.has("title")) data.title = (formData.get("title") as string) || null;
   if (formData.has("instructorId")) data.instructorId = formData.get("instructorId") as string;
   if (formData.has("participantName")) data.participantName = (formData.get("participantName") as string) || null;
-  if (formData.has("scheduledAt")) data.scheduledAt = new Date(formData.get("scheduledAt") as string);
-  if (formData.has("endAt")) data.endAt = formData.get("endAt") ? new Date(formData.get("endAt") as string) : null;
+  if (formData.has("scheduledAt")) data.scheduledAt = parseJSTDate(formData.get("scheduledAt") as string)!;
+  if (formData.has("endAt")) data.endAt = formData.get("endAt") ? parseJSTDate(formData.get("endAt") as string) : null;
   if (formData.has("status")) data.status = formData.get("status") as string;
   if (formData.has("memo")) data.memo = (formData.get("memo") as string) || null;
   await prisma.schedule.update({ where: { id }, data });
@@ -106,6 +114,7 @@ export async function notifySchedule(id: string) {
   const catLabel = getCategoryInfo(schedule.category).label;
   const displayTitle = schedule.title || catLabel;
   const dateStr = new Date(schedule.scheduledAt).toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
     month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit",
   });
 
