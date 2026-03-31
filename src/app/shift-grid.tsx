@@ -118,11 +118,14 @@ function CellDropdown({
                 }}
                 onClick={(e) => { e.stopPropagation(); onEdit(s); }}
                 className={`flex-1 rounded px-1.5 py-0.5 text-xs font-medium truncate ${cat.color} flex items-center gap-0.5 text-left hover:opacity-80 cursor-grab active:cursor-grabbing`}
-                title={
-                  s.scheduledAt
-                    ? `${cat.label}\n${new Date(s.scheduledAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}${s.endAt ? `〜${new Date(s.endAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}` : ""}\nドラッグで移動 / クリックで編集`
-                    : `${cat.label}\nドラッグで移動 / クリックで編集`
-                }
+                title={(() => {
+                  const d = new Date(s.scheduledAt);
+                  const isAllDay = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && !s.endAt;
+                  if (isAllDay) return `${cat.label}\n終日\nドラッグで移動 / クリックで編集`;
+                  const start = d.toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
+                  const end = s.endAt ? `〜${new Date(s.endAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}` : "";
+                  return `${cat.label}\n${start}${end}\nドラッグで移動 / クリックで編集`;
+                })()}
               >
                 {s.isRecurring && <Repeat className="h-2.5 w-2.5 shrink-0" />}
                 {cat.label}
@@ -202,6 +205,7 @@ export function ShiftGrid({ instructors, schedules }: Props) {
   const [editEndTime, setEditEndTime] = useState("");
   const [editInstructor, setEditInstructor] = useState("");
   const [editMemo, setEditMemo] = useState("");
+  const [editAllDay, setEditAllDay] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
 
   const dates = useMemo(() => getGridDates(baseDate, view), [baseDate, view]);
@@ -287,13 +291,17 @@ export function ShiftGrid({ instructors, schedules }: Props) {
 
   function openEdit(s: Schedule) {
     setEditItem(s);
-    // 時刻部分を抽出
     const d = new Date(s.scheduledAt);
     const p = (n: number) => n.toString().padStart(2, "0");
-    setEditTime(`${p(d.getHours())}:${p(d.getMinutes())}`);
+    const h = d.getUTCHours();
+    const m = d.getUTCMinutes();
+    // 00:00で終了時刻なし → 終日と判定
+    const isAllDay = h === 0 && m === 0 && !s.endAt;
+    setEditAllDay(isAllDay);
+    setEditTime(isAllDay ? "" : `${p(h)}:${p(m)}`);
     if (s.endAt) {
       const e = new Date(s.endAt);
-      setEditEndTime(`${p(e.getHours())}:${p(e.getMinutes())}`);
+      setEditEndTime(`${p(e.getUTCHours())}:${p(e.getUTCMinutes())}`);
     } else {
       setEditEndTime("");
     }
@@ -308,8 +316,13 @@ export function ShiftGrid({ instructors, schedules }: Props) {
       const dateKey = toDateKey(new Date(editItem.scheduledAt));
       const fd = new FormData();
       fd.set("instructorId", editInstructor);
-      fd.set("scheduledAt", `${dateKey}T${editTime || "10:00"}`);
-      if (editEndTime) fd.set("endAt", `${dateKey}T${editEndTime}`);
+      if (editAllDay) {
+        fd.set("scheduledAt", `${dateKey}T00:00`);
+        // 終日の場合endAtは送らない
+      } else {
+        fd.set("scheduledAt", `${dateKey}T${editTime || "10:00"}`);
+        if (editEndTime) fd.set("endAt", `${dateKey}T${editEndTime}`);
+      }
       fd.set("memo", editMemo);
       await updateSchedule(editItem.id, fd);
       setEditItem(null);
@@ -451,16 +464,22 @@ export function ShiftGrid({ instructors, schedules }: Props) {
                   {instructors.map((i) => (<option key={i.id} value={i.id}>{i.name}</option>))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">開始時間</label>
-                  <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={editAllDay} onChange={(e) => { setEditAllDay(e.target.checked); if (e.target.checked) { setEditTime(""); setEditEndTime(""); } }} className="h-4 w-4 rounded" />
+                <span className="text-sm font-medium">終日</span>
+              </label>
+              {!editAllDay && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">開始時間</label>
+                    <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">終了時間</label>
+                    <input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">終了時間</label>
-                  <input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />
-                </div>
-              </div>
+              )}
               <div className="space-y-2">
                 <label className="text-sm font-medium">メモ</label>
                 <textarea value={editMemo} onChange={(e) => setEditMemo(e.target.value)} rows={2} className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" />
