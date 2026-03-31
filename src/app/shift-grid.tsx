@@ -67,6 +67,7 @@ function CellDropdown({
   onDelete,
   onNotify,
   onEdit,
+  onDrop,
 }: {
   dateKey: string;
   instructorId: string;
@@ -75,6 +76,7 @@ function CellDropdown({
   onDelete: (id: string) => void;
   onNotify: (id: string) => void;
   onEdit: (s: Schedule) => void;
+  onDrop: (scheduleId: string, newDateKey: string, newInstructorId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -87,21 +89,39 @@ function CellDropdown({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
+  const [dragOver, setDragOver] = useState(false);
+
   return (
-    <div ref={ref} className="relative min-h-[40px]">
-      {/* 既存のバッジ表示 */}
+    <div
+      ref={ref}
+      className={`relative min-h-[40px] transition-colors ${dragOver ? "bg-blue-100/60 ring-2 ring-blue-300 ring-inset rounded" : ""}`}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const scheduleId = e.dataTransfer.getData("scheduleId");
+        if (scheduleId) onDrop(scheduleId, dateKey, instructorId);
+      }}
+    >
+      {/* バッジ表示 */}
       <div className="space-y-0.5">
         {items.map((s) => {
           const cat = getCategoryInfo(s.category);
           return (
             <div key={s.id} className="group flex items-center gap-0.5">
               <button
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("scheduleId", s.id);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
                 onClick={(e) => { e.stopPropagation(); onEdit(s); }}
-                className={`flex-1 rounded px-1.5 py-0.5 text-xs font-medium truncate ${cat.color} flex items-center gap-0.5 text-left hover:opacity-80`}
+                className={`flex-1 rounded px-1.5 py-0.5 text-xs font-medium truncate ${cat.color} flex items-center gap-0.5 text-left hover:opacity-80 cursor-grab active:cursor-grabbing`}
                 title={
                   s.scheduledAt
-                    ? `${cat.label}\n${new Date(s.scheduledAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}${s.endAt ? `〜${new Date(s.endAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}` : ""}\nクリックで編集`
-                    : `${cat.label}\nクリックで編集`
+                    ? `${cat.label}\n${new Date(s.scheduledAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}${s.endAt ? `〜${new Date(s.endAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}` : ""}\nドラッグで移動 / クリックで編集`
+                    : `${cat.label}\nドラッグで移動 / クリックで編集`
                 }
               >
                 {s.isRecurring && <Repeat className="h-2.5 w-2.5 shrink-0" />}
@@ -231,6 +251,37 @@ export function ShiftGrid({ instructors, schedules }: Props) {
       alert("LINEに通知しました");
     } catch (e) {
       alert(e instanceof Error ? e.message : "通知失敗");
+    }
+  }
+
+  async function handleDrop(scheduleId: string, newDateKey: string, newInstructorId: string) {
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.set("instructorId", newInstructorId);
+      // 元の時刻を維持して日付だけ変更
+      const original = schedules.find((s) => s.id === scheduleId);
+      if (original) {
+        const oldDate = new Date(original.scheduledAt);
+        const hours = oldDate.getUTCHours().toString().padStart(2, "0");
+        const mins = oldDate.getUTCMinutes().toString().padStart(2, "0");
+        fd.set("scheduledAt", `${newDateKey}T${hours}:${mins}`);
+        if (original.endAt) {
+          const oldEnd = new Date(original.endAt);
+          const duration = oldEnd.getTime() - oldDate.getTime();
+          const newStart = new Date(`${newDateKey}T${hours}:${mins}+09:00`);
+          const newEnd = new Date(newStart.getTime() + duration);
+          const eH = newEnd.toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit", hour12: false });
+          fd.set("endAt", `${newDateKey}T${eH}`);
+        }
+      } else {
+        fd.set("scheduledAt", `${newDateKey}T10:00`);
+      }
+      await updateSchedule(scheduleId, fd);
+    } catch (e) {
+      alert("移動に失敗しました: " + (e instanceof Error ? e.message : ""));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -370,6 +421,7 @@ export function ShiftGrid({ instructors, schedules }: Props) {
                           onDelete={handleDelete}
                           onNotify={handleNotify}
                           onEdit={openEdit}
+                          onDrop={handleDrop}
                         />
                       </td>
                     );
