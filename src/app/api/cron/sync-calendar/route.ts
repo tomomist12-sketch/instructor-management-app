@@ -134,6 +134,10 @@ export async function GET(req: NextRequest) {
       consultEvents: consultEvents.length,
       created,
       skipped,
+      debug: consultEvents.map((e) => ({
+        summary: e.summary,
+        description: e.description?.substring(0, 500) || null,
+      })),
     });
   } catch (e) {
     console.error("Calendar sync error:", e);
