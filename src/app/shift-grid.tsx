@@ -120,7 +120,7 @@ function CellDropdown({
                 className={`flex-1 rounded px-1.5 py-0.5 text-xs font-medium truncate ${cat.color} flex items-center gap-0.5 text-left hover:opacity-80 cursor-grab active:cursor-grabbing`}
                 title={(() => {
                   const d = new Date(s.scheduledAt);
-                  const isAllDay = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && !s.endAt;
+                  const isAllDay = d.getHours() === 0 && d.getMinutes() === 0 && !s.endAt;
                   if (isAllDay) return `${cat.label}\n終日\nドラッグで移動 / クリックで編集`;
                   const start = d.toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
                   const end = s.endAt ? `〜${new Date(s.endAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}` : "";
@@ -267,16 +267,14 @@ export function ShiftGrid({ instructors, schedules }: Props) {
       const original = schedules.find((s) => s.id === scheduleId);
       if (original) {
         const oldDate = new Date(original.scheduledAt);
-        const hours = oldDate.getUTCHours().toString().padStart(2, "0");
-        const mins = oldDate.getUTCMinutes().toString().padStart(2, "0");
+        const hours = oldDate.getHours().toString().padStart(2, "0");
+        const mins = oldDate.getMinutes().toString().padStart(2, "0");
         fd.set("scheduledAt", `${newDateKey}T${hours}:${mins}`);
         if (original.endAt) {
           const oldEnd = new Date(original.endAt);
-          const duration = oldEnd.getTime() - oldDate.getTime();
-          const newStart = new Date(`${newDateKey}T${hours}:${mins}+09:00`);
-          const newEnd = new Date(newStart.getTime() + duration);
-          const eH = newEnd.toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit", hour12: false });
-          fd.set("endAt", `${newDateKey}T${eH}`);
+          const eH = oldEnd.getHours().toString().padStart(2, "0");
+          const eM = oldEnd.getMinutes().toString().padStart(2, "0");
+          fd.set("endAt", `${newDateKey}T${eH}:${eM}`);
         }
       } else {
         fd.set("scheduledAt", `${newDateKey}T10:00`);
@@ -293,15 +291,15 @@ export function ShiftGrid({ instructors, schedules }: Props) {
     setEditItem(s);
     const d = new Date(s.scheduledAt);
     const p = (n: number) => n.toString().padStart(2, "0");
-    const h = d.getUTCHours();
-    const m = d.getUTCMinutes();
-    // 00:00で終了時刻なし → 終日と判定
+    // ブラウザのローカルタイム（JST）で時刻取得
+    const h = d.getHours();
+    const m = d.getMinutes();
     const isAllDay = h === 0 && m === 0 && !s.endAt;
     setEditAllDay(isAllDay);
     setEditTime(isAllDay ? "" : `${p(h)}:${p(m)}`);
     if (s.endAt) {
       const e = new Date(s.endAt);
-      setEditEndTime(`${p(e.getUTCHours())}:${p(e.getUTCMinutes())}`);
+      setEditEndTime(`${p(e.getHours())}:${p(e.getMinutes())}`);
     } else {
       setEditEndTime("");
     }
@@ -318,10 +316,10 @@ export function ShiftGrid({ instructors, schedules }: Props) {
       fd.set("instructorId", editInstructor);
       if (editAllDay) {
         fd.set("scheduledAt", `${dateKey}T00:00`);
-        // 終日の場合endAtは送らない
       } else {
         fd.set("scheduledAt", `${dateKey}T${editTime || "10:00"}`);
         if (editEndTime) fd.set("endAt", `${dateKey}T${editEndTime}`);
+        else fd.set("endAt", "");
       }
       fd.set("memo", editMemo);
       await updateSchedule(editItem.id, fd);
