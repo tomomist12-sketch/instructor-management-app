@@ -9,7 +9,7 @@ const navItems = [
   { href: "/", label: "シフト一覧", icon: LayoutDashboard },
   { href: "/rotation", label: "繰り返し設定", icon: RotateCw },
   { href: "/consults", label: "コンサル一覧", icon: List },
-  { href: "/consult-flow", label: "当日の流れ", icon: ClipboardList },
+  { href: "/consult-flow", label: "初回コンサル", icon: ClipboardList },
   { href: "/instructors", label: "講師管理", icon: UserCog },
   { href: "/settings", label: "LINE通知設定", icon: Settings },
 ];
