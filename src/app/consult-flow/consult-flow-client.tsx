@@ -104,14 +104,11 @@ export function ConsultFlowClient({ zoomUrl, consultTime, consultDate, isToday, 
             label="Zoomリンク送付文"
             text={`@さん
 本日${timeText}よりzoomのご参加をお願いします✨
-ZOOMのURLはメールからご確認ください😊
+
+${zoomUrl || "（Zoom URL未取得）"}
+
 パスワード無しでご参加いただけます！`}
           />
-          {zoomUrl && (
-            <div className="mt-2">
-              <CopyBlock label="Zoom URL（単体コピー）" text={zoomUrl} />
-            </div>
-          )}
         </CardContent>
       </Card>
 
