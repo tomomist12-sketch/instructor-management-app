@@ -49,27 +49,33 @@ export async function GET(req: NextRequest) {
       });
 
       if (existing) {
-        // 既存予定の参加者名・メモを更新（説明欄が後から変わった場合に対応）
+        // 既存予定の参加者名・メモ・URLを常に最新に更新
         const desc = event.description || "";
         const updNames: string[] = [];
         const updEmails: string[] = [];
         for (const line of desc.split("\n")) {
           const nm = line.match(/お名前[：:]\s*(.+)/);
           if (nm) updNames.push(nm[1].trim());
-          const em = line.match(/メール[：:]\s*(\S+)/);
+          const em = line.match(/メール(?:アドレス)?[：:]\s*(\S+)/);
           if (em) updEmails.push(em[1].trim());
         }
-        if (updNames.length > 0 && !existing.participantName) {
-          let updMemo = `gcal:${event.id}\n【申込者】`;
+        const updUrl = event.location || null;
+        let updMemo = `gcal:${event.id}`;
+        if (updUrl) updMemo += `\n🔗 ${updUrl}`;
+        if (updNames.length > 0) {
+          updMemo += "\n【申込者】";
           for (let i = 0; i < updNames.length; i++) {
             updMemo += `\n${updNames[i]}`;
-            if (updEmails[i]) updMemo += ` (${updEmails[i]})`;
+            if (updEmails[i]) updMemo += `\n  📧 ${updEmails[i]}`;
           }
-          await prisma.schedule.update({
-            where: { id: existing.id },
-            data: { participantName: updNames.join("、"), memo: updMemo },
-          });
         }
+        await prisma.schedule.update({
+          where: { id: existing.id },
+          data: {
+            participantName: updNames.length > 0 ? updNames.join("、") : existing.participantName,
+            memo: updMemo,
+          },
+        });
         skipped++;
         continue;
       }
@@ -95,18 +101,25 @@ export async function GET(req: NextRequest) {
       for (const line of desc.split("\n")) {
         const nameMatch = line.match(/お名前[：:]\s*(.+)/);
         if (nameMatch) names.push(nameMatch[1].trim());
-        const emailMatch = line.match(/メール[：:]\s*(\S+)/);
+        // 「メールアドレス：」にも対応
+        const emailMatch = line.match(/メール(?:アドレス)?[：:]\s*(\S+)/);
         if (emailMatch) emails.push(emailMatch[1].trim());
       }
       const participantName = names.length > 0 ? names.join("、") : null;
 
-      // 申込者情報をメモに整形
+      // URL（Zoom等）を取得
+      const url = event.location || null;
+
+      // メモに申込者情報・メール・URLを整形
       let memoText = `gcal:${event.id}`;
+      if (url) {
+        memoText += `\n🔗 ${url}`;
+      }
       if (names.length > 0) {
         memoText += "\n【申込者】";
         for (let i = 0; i < names.length; i++) {
           memoText += `\n${names[i]}`;
-          if (emails[i]) memoText += ` (${emails[i]})`;
+          if (emails[i]) memoText += `\n  📧 ${emails[i]}`;
         }
       }
 

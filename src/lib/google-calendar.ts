@@ -12,9 +12,10 @@ function getAuth() {
 export type CalendarEvent = {
   id: string;
   summary: string;
-  start: string; // ISO date or datetime
+  start: string;
   end: string | null;
   description: string | null;
+  location: string | null;
 };
 
 export async function fetchCalendarEvents(
@@ -42,5 +43,6 @@ export async function fetchCalendarEvents(
     start: e.start?.dateTime || e.start?.date || "",
     end: e.end?.dateTime || e.end?.date || null,
     description: e.description || null,
+    location: e.location || null,
   }));
 }
