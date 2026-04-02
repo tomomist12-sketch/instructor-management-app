@@ -49,6 +49,27 @@ export async function GET(req: NextRequest) {
       });
 
       if (existing) {
+        // 既存予定の参加者名・メモを更新（説明欄が後から変わった場合に対応）
+        const desc = event.description || "";
+        const updNames: string[] = [];
+        const updEmails: string[] = [];
+        for (const line of desc.split("\n")) {
+          const nm = line.match(/お名前[：:]\s*(.+)/);
+          if (nm) updNames.push(nm[1].trim());
+          const em = line.match(/メール[：:]\s*(\S+)/);
+          if (em) updEmails.push(em[1].trim());
+        }
+        if (updNames.length > 0 && !existing.participantName) {
+          let updMemo = `gcal:${event.id}\n【申込者】`;
+          for (let i = 0; i < updNames.length; i++) {
+            updMemo += `\n${updNames[i]}`;
+            if (updEmails[i]) updMemo += ` (${updEmails[i]})`;
+          }
+          await prisma.schedule.update({
+            where: { id: existing.id },
+            data: { participantName: updNames.join("、"), memo: updMemo },
+          });
+        }
         skipped++;
         continue;
       }
@@ -67,13 +88,27 @@ export async function GET(req: NextRequest) {
 
       if (!instructorId) continue;
 
-      // 参加者名を抽出（タイトルから「初回コンサル」等を除いた部分）
-      let participantName = event.summary
-        .replace(/初回コンサル/g, "")
-        .replace(/コンサル/g, "")
-        .replace(/初回/g, "")
-        .trim();
-      if (participantName === "") participantName = null as unknown as string;
+      // 説明欄から申込者情報を抽出
+      const desc = event.description || "";
+      const names: string[] = [];
+      const emails: string[] = [];
+      for (const line of desc.split("\n")) {
+        const nameMatch = line.match(/お名前[：:]\s*(.+)/);
+        if (nameMatch) names.push(nameMatch[1].trim());
+        const emailMatch = line.match(/メール[：:]\s*(\S+)/);
+        if (emailMatch) emails.push(emailMatch[1].trim());
+      }
+      const participantName = names.length > 0 ? names.join("、") : null;
+
+      // 申込者情報をメモに整形
+      let memoText = `gcal:${event.id}`;
+      if (names.length > 0) {
+        memoText += "\n【申込者】";
+        for (let i = 0; i < names.length; i++) {
+          memoText += `\n${names[i]}`;
+          if (emails[i]) memoText += ` (${emails[i]})`;
+        }
+      }
 
       const scheduledAt = new Date(event.start);
       const endAt = event.end ? new Date(event.end) : null;
@@ -83,10 +118,10 @@ export async function GET(req: NextRequest) {
           category: "first_consult",
           title: event.summary,
           instructorId,
-          participantName: participantName || null,
+          participantName,
           scheduledAt,
           endAt,
-          memo: `gcal:${event.id}`,
+          memo: memoText,
           status: "scheduled",
         },
       });
