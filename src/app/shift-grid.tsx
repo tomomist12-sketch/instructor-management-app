@@ -376,6 +376,30 @@ export function ShiftGrid({ instructors, schedules }: Props) {
           ))}
         </div>
         {saving && <span className="text-xs text-muted-foreground">保存中...</span>}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            setSaving(true);
+            try {
+              const res = await fetch("/api/cron/sync-calendar?manual=1");
+              const data = await res.json();
+              if (data.ok) {
+                alert(`Googleカレンダー同期完了：${data.created}件追加（${data.skipped}件スキップ）`);
+                window.location.reload();
+              } else {
+                alert("同期エラー: " + (data.error || "不明"));
+              }
+            } catch {
+              alert("同期に失敗しました");
+            } finally {
+              setSaving(false);
+            }
+          }}
+          className="text-xs"
+        >
+          📅 Googleカレンダー同期
+        </Button>
       </div>
 
       {/* 凡例 */}
