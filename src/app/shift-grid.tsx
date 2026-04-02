@@ -473,13 +473,41 @@ export function ShiftGrid({ instructors, schedules }: Props) {
         {editItem && (() => {
           const cat = getCategoryInfo(editItem.category);
           return (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${cat.color}`}>{cat.label}</span>
                 <span className="text-sm text-muted-foreground">
                   {new Date(editItem.scheduledAt).toLocaleDateString("ja-JP", { month: "long", day: "numeric", weekday: "short" })}
                 </span>
+                {editItem.participantName && (
+                  <span className="text-sm font-medium ml-auto">{editItem.participantName}</span>
+                )}
               </div>
+
+              {/* メモ内容プレビュー（URLやメール等を見やすく表示） */}
+              {editItem.memo && editItem.memo.includes("\n") && (
+                <div className="rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap break-all leading-relaxed">
+                  {editItem.memo.split("\n").filter(l => !l.startsWith("gcal:")).map((line, i) => {
+                    // URLをリンク化
+                    if (line.includes("http")) {
+                      const urlMatch = line.match(/(https?:\/\/\S+)/);
+                      if (urlMatch) {
+                        const before = line.substring(0, line.indexOf(urlMatch[1]));
+                        return (
+                          <div key={i}>
+                            {before}
+                            <a href={urlMatch[1]} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all">
+                              {urlMatch[1]}
+                            </a>
+                          </div>
+                        );
+                      }
+                    }
+                    return <div key={i}>{line}</div>;
+                  })}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label className="text-sm font-medium">担当講師</label>
                 <select value={editInstructor} onChange={(e) => setEditInstructor(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
@@ -502,10 +530,10 @@ export function ShiftGrid({ instructors, schedules }: Props) {
                   </div>
                 </div>
               )}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">メモ</label>
-                <textarea value={editMemo} onChange={(e) => setEditMemo(e.target.value)} rows={2} className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" />
-              </div>
+              <details className="text-sm">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">メモを編集</summary>
+                <textarea value={editMemo} onChange={(e) => setEditMemo(e.target.value)} rows={5} className="mt-2 flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" />
+              </details>
               <div className="flex gap-2">
                 <Button onClick={handleEditSave} disabled={editLoading} className="flex-1">
                   {editLoading ? "保存中..." : "保存"}
