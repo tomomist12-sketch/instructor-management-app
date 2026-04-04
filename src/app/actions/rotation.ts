@@ -146,11 +146,17 @@ export async function generateRotationSchedules(settingId: string) {
     return { instructorId: entry, startTime: setting.startTime, endTime: setting.endTime };
   });
 
-  const startDate = new Date(setting.startDate);
+  // JSTベースで日付計算するためにパース
+  const [sY, sM, sD] = setting.startDate.split("-").map(Number);
   const groupId = randomUUID();
 
-  let current = new Date(startDate);
-  while (current.getDay() !== setting.dayOfWeek) current.setDate(current.getDate() + 1);
+  // JST基準で開始日から該当曜日を見つける
+  let curY = sY, curM = sM, curD = sD;
+  // 仮のDateで曜日を判定（JSTとして扱うため+09:00で構築）
+  let tempDate = new Date(`${setting.startDate}T00:00:00+09:00`);
+  while (tempDate.getUTCDay() !== setting.dayOfWeek) {
+    tempDate = new Date(tempDate.getTime() + 86400000);
+  }
 
   await prisma.schedule.deleteMany({
     where: { recurrenceGroupId: { startsWith: `rotation_${settingId}` } },
@@ -160,21 +166,22 @@ export async function generateRotationSchedules(settingId: string) {
   let count = 0;
 
   for (let week = 0; week < setting.weeksToGenerate; week++) {
-    const date = new Date(current);
-    date.setDate(current.getDate() + week * 7);
+    const dateMs = tempDate.getTime() + week * 7 * 86400000;
+    const weekDate = new Date(dateMs);
+    // JSTの日付文字列を取得
+    const dateStr = weekDate.toISOString().split("T")[0]; // UTC日付だがtempDateが+09:00基準なのでOK
 
     const entry = parsed[week % parsed.length];
     const hasTime = entry.startTime && entry.startTime !== "" && entry.startTime !== "00:00";
-    const [startH, startM] = hasTime ? entry.startTime.split(":").map(Number) : [0, 0];
-    const [endH, endM] = entry.endTime && entry.endTime !== "00:00" ? entry.endTime.split(":").map(Number) : [0, 0];
+    const sTime = hasTime ? entry.startTime : "00:00";
+    const eTime = entry.endTime && entry.endTime !== "00:00" ? entry.endTime : "";
 
-    const scheduledAt = new Date(date);
-    scheduledAt.setHours(startH, startM, 0, 0);
+    // JST時刻として明示的に構築
+    const scheduledAt = new Date(`${dateStr}T${sTime}:00+09:00`);
 
     let endAt: Date | null = null;
-    if (endH || endM) {
-      endAt = new Date(date);
-      endAt.setHours(endH, endM, 0, 0);
+    if (eTime) {
+      endAt = new Date(`${dateStr}T${eTime}:00+09:00`);
     }
 
     await prisma.schedule.create({
