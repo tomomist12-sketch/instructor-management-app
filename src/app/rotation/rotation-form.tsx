@@ -25,14 +25,20 @@ const dayNames = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日
 
 type InstructorTime = { id: string; startTime: string; endTime: string };
 
-// instructorOrder形式: "id1:20:00-21:30,id2:19:00-20:30" or "id1,id2"（時間なし）
+// instructorOrder形式: "id1|20:00|21:30,id2|19:00|20:30" or "id1,id2"（時間なし）
 function parseOrder(orderStr: string): InstructorTime[] {
   if (!orderStr) return [];
   return orderStr.split(",").map((entry) => {
-    const [id, times] = entry.split(":");
-    if (times && times.includes("-")) {
-      const [s, e] = times.split("-");
-      return { id, startTime: s, endTime: e };
+    const parts = entry.split("|");
+    if (parts.length >= 3) {
+      return { id: parts[0], startTime: parts[1], endTime: parts[2] };
+    }
+    // 旧形式（UUID:HH:MM-HH:MM）のフォールバック
+    if (entry.length > 36 && entry[36] === ":") {
+      const id = entry.substring(0, 36);
+      const timePart = entry.substring(37);
+      const [s, e] = timePart.split("-");
+      if (s && e) return { id, startTime: s, endTime: e };
     }
     return { id: entry, startTime: "", endTime: "" };
   });
@@ -40,7 +46,7 @@ function parseOrder(orderStr: string): InstructorTime[] {
 
 function serializeOrder(items: InstructorTime[], perInstructorTime: boolean): string[] {
   if (perInstructorTime) {
-    return items.map((i) => `${i.id}:${i.startTime || "00:00"}-${i.endTime || "00:00"}`);
+    return items.map((i) => `${i.id}|${i.startTime || "00:00"}|${i.endTime || "00:00"}`);
   }
   return items.map((i) => i.id);
 }

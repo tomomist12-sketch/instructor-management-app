@@ -130,12 +130,18 @@ export async function generateRotationSchedules(settingId: string) {
   const entries = setting.instructorOrder.split(",").filter(Boolean);
   if (entries.length === 0) throw new Error("講師が設定されていません");
 
-  // "id:startTime-endTime" or "id" 形式をパース
+  // "id|startTime|endTime" or "id:startTime-endTime"(旧) or "id" 形式をパース
   const parsed = entries.map((entry) => {
-    const [idPart, timePart] = entry.split(":");
-    if (timePart && timePart.includes("-")) {
+    const parts = entry.split("|");
+    if (parts.length >= 3) {
+      return { instructorId: parts[0], startTime: parts[1], endTime: parts[2] };
+    }
+    // 旧形式フォールバック（UUID:HH:MM-HH:MM）
+    if (entry.length > 36 && entry[36] === ":") {
+      const id = entry.substring(0, 36);
+      const timePart = entry.substring(37);
       const [s, e] = timePart.split("-");
-      return { instructorId: idPart, startTime: s, endTime: e };
+      if (s && e) return { instructorId: id, startTime: s, endTime: e };
     }
     return { instructorId: entry, startTime: setting.startTime, endTime: setting.endTime };
   });
