@@ -32,16 +32,17 @@ export default async function RotationPage() {
         showTime
       />
 
-      {/* 3. ライブトーク: 週替わりローテーション（時間はシフト表から後で編集） */}
+      {/* 3. ライブトーク: 講師ごとに時間が違うローテーション */}
       <RotationForm
         category="live_talk"
         categoryLabel="ライブトーク"
         instructors={instList}
         existing={settings.find((s) => s.category === "live_talk") || null}
-        defaultStartTime=""
-        defaultEndTime=""
+        defaultStartTime="20:00"
+        defaultEndTime="21:30"
         showTime={false}
-        note="※ 時間は毎回異なるため、シフト表のバッジをクリックして個別に編集してください"
+        perInstructorTime
+        note="担当者ごとに開催時間が異なります。各講師の横に時間を設定してください。"
       />
 
       {/* 4. 勉強会: 週替わりローテーション */}

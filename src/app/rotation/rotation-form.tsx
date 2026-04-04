@@ -23,6 +23,28 @@ type Setting = {
 
 const dayNames = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
 
+type InstructorTime = { id: string; startTime: string; endTime: string };
+
+// instructorOrder形式: "id1:20:00-21:30,id2:19:00-20:30" or "id1,id2"（時間なし）
+function parseOrder(orderStr: string): InstructorTime[] {
+  if (!orderStr) return [];
+  return orderStr.split(",").map((entry) => {
+    const [id, times] = entry.split(":");
+    if (times && times.includes("-")) {
+      const [s, e] = times.split("-");
+      return { id, startTime: s, endTime: e };
+    }
+    return { id: entry, startTime: "", endTime: "" };
+  });
+}
+
+function serializeOrder(items: InstructorTime[], perInstructorTime: boolean): string[] {
+  if (perInstructorTime) {
+    return items.map((i) => `${i.id}:${i.startTime || "00:00"}-${i.endTime || "00:00"}`);
+  }
+  return items.map((i) => i.id);
+}
+
 type Props = {
   category: string;
   categoryLabel: string;
@@ -31,18 +53,20 @@ type Props = {
   defaultStartTime: string;
   defaultEndTime: string;
   showTime: boolean;
+  perInstructorTime?: boolean; // 講師ごとに時間が違うモード
   note?: string;
 };
 
-export function RotationForm({ category, categoryLabel, instructors, existing, defaultStartTime, defaultEndTime, showTime, note }: Props) {
+export function RotationForm({ category, categoryLabel, instructors, existing, defaultStartTime, defaultEndTime, showTime, perInstructorTime = false, note }: Props) {
   const [dayOfWeek, setDayOfWeek] = useState(existing?.dayOfWeek ?? 0);
   const [startTime, setStartTime] = useState(existing?.startTime ?? defaultStartTime);
   const [endTime, setEndTime] = useState(existing?.endTime ?? defaultEndTime);
   const [startDate, setStartDate] = useState(existing?.startDate ?? new Date().toISOString().split("T")[0]);
   const [weeksToGenerate, setWeeksToGenerate] = useState(existing?.weeksToGenerate ?? 12);
-  const [order, setOrder] = useState<string[]>(
-    existing?.instructorOrder ? existing.instructorOrder.split(",") : instructors.map((i) => i.id)
-  );
+
+  const parsed = existing?.instructorOrder ? parseOrder(existing.instructorOrder) : instructors.map((i) => ({ id: i.id, startTime: defaultStartTime, endTime: defaultEndTime }));
+  const [order, setOrder] = useState<InstructorTime[]>(parsed);
+
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -51,13 +75,25 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
 
   function moveUp(i: number) { if (i === 0) return; const n = [...order]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; setOrder(n); }
   function moveDown(i: number) { if (i === order.length - 1) return; const n = [...order]; [n[i], n[i + 1]] = [n[i + 1], n[i]]; setOrder(n); }
-  function toggle(id: string) { order.includes(id) ? setOrder(order.filter((x) => x !== id)) : setOrder([...order, id]); }
+  function toggleInstructor(id: string) {
+    if (order.find((o) => o.id === id)) {
+      setOrder(order.filter((o) => o.id !== id));
+    } else {
+      setOrder([...order, { id, startTime: defaultStartTime, endTime: defaultEndTime }]);
+    }
+  }
+  function updateTime(idx: number, field: "startTime" | "endTime", value: string) {
+    const n = [...order];
+    n[idx] = { ...n[idx], [field]: value };
+    setOrder(n);
+  }
 
   async function handleSave() {
     if (order.length === 0) { setMessage({ type: "error", text: "講師を1名以上選択してください" }); return; }
     setLoading(true); setMessage(null);
     try {
-      await saveRotationSetting({ id: existing?.id, category, dayOfWeek, startTime, endTime, instructorOrder: order, startDate, weeksToGenerate });
+      const serialized = serializeOrder(order, perInstructorTime);
+      await saveRotationSetting({ id: existing?.id, category, dayOfWeek, startTime, endTime, instructorOrder: serialized, startDate, weeksToGenerate });
       setMessage({ type: "success", text: "設定を保存しました" });
     } catch (e) { setMessage({ type: "error", text: "保存失敗: " + (e instanceof Error ? e.message : "") }); }
     finally { setLoading(false); }
@@ -81,15 +117,23 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
 
   // プレビュー
   const previewWeeks = Math.min(weeksToGenerate, 6);
-  const preview: { date: string; instructor: string }[] = [];
+  const preview: { date: string; instructor: string; time: string }[] = [];
   if (order.length > 0) {
     const start = new Date(startDate);
     let cur = new Date(start);
     while (cur.getDay() !== dayOfWeek) cur.setDate(cur.getDate() + 1);
     for (let i = 0; i < previewWeeks; i++) {
       const d = new Date(cur); d.setDate(cur.getDate() + i * 7);
-      const inst = instructors.find((x) => x.id === order[i % order.length]);
-      preview.push({ date: d.toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }), instructor: inst?.name || "?" });
+      const item = order[i % order.length];
+      const inst = instructors.find((x) => x.id === item.id);
+      const time = perInstructorTime
+        ? `${item.startTime}〜${item.endTime}`
+        : (showTime ? `${startTime}〜${endTime}` : "");
+      preview.push({
+        date: d.toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }),
+        instructor: inst?.name || "?",
+        time,
+      });
     }
   }
 
@@ -120,7 +164,7 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
             <Input type="number" min={1} max={52} value={weeksToGenerate} onChange={(e) => setWeeksToGenerate(Number(e.target.value))} />
           </div>
         </div>
-        {showTime && (
+        {showTime && !perInstructorTime && (
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2"><Label>開始時間</Label><Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} /></div>
             <div className="space-y-2"><Label>終了時間</Label><Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} /></div>
@@ -135,24 +179,33 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
         <div className="space-y-2">
           <Label>担当順（上から順にローテーション）</Label>
           <div className="space-y-1">
-            {order.map((id, idx) => {
-              const inst = instructors.find((x) => x.id === id);
+            {order.map((item, idx) => {
+              const inst = instructors.find((x) => x.id === item.id);
               if (!inst) return null;
               return (
-                <div key={id} className="flex items-center gap-2 rounded-md border p-2">
-                  <GripVertical className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium flex-1">{idx + 1}. {inst.name}</span>
-                  <button onClick={() => moveUp(idx)} disabled={idx === 0} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">↑</button>
-                  <button onClick={() => moveDown(idx)} disabled={idx === order.length - 1} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">↓</button>
-                  <button onClick={() => toggle(id)} className="text-xs text-destructive">除外</button>
+                <div key={item.id} className="flex items-center gap-2 rounded-md border p-2">
+                  <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm font-medium w-20 shrink-0">{idx + 1}. {inst.name}</span>
+                  {perInstructorTime && (
+                    <>
+                      <Input type="time" value={item.startTime} onChange={(e) => updateTime(idx, "startTime", e.target.value)} className="w-24 h-8 text-xs" />
+                      <span className="text-xs text-muted-foreground">〜</span>
+                      <Input type="time" value={item.endTime} onChange={(e) => updateTime(idx, "endTime", e.target.value)} className="w-24 h-8 text-xs" />
+                    </>
+                  )}
+                  <div className="flex gap-1 ml-auto shrink-0">
+                    <button onClick={() => moveUp(idx)} disabled={idx === 0} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">↑</button>
+                    <button onClick={() => moveDown(idx)} disabled={idx === order.length - 1} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">↓</button>
+                    <button onClick={() => toggleInstructor(item.id)} className="text-xs text-destructive">除外</button>
+                  </div>
                 </div>
               );
             })}
           </div>
-          {instructors.filter((i) => !order.includes(i.id)).length > 0 && (
+          {instructors.filter((i) => !order.find((o) => o.id === i.id)).length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
-              {instructors.filter((i) => !order.includes(i.id)).map((i) => (
-                <button key={i.id} onClick={() => toggle(i.id)} className="rounded-md border px-2 py-1 text-xs hover:bg-accent">+ {i.name}</button>
+              {instructors.filter((i) => !order.find((o) => o.id === i.id)).map((i) => (
+                <button key={i.id} onClick={() => toggleInstructor(i.id)} className="rounded-md border px-2 py-1 text-xs hover:bg-accent">+ {i.name}</button>
               ))}
             </div>
           )}
@@ -176,6 +229,7 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
               <div key={i} className="flex items-center justify-between text-sm rounded-md border p-1.5 px-2">
                 <span className="text-muted-foreground">{p.date}</span>
                 <span className="font-medium">{p.instructor}</span>
+                {p.time && <span className="text-xs text-muted-foreground">{p.time}</span>}
               </div>
             ))}
           </div>

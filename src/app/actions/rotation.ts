@@ -127,18 +127,24 @@ export async function generateRotationSchedules(settingId: string) {
   const setting = await prisma.rotationSetting.findUnique({ where: { id: settingId } });
   if (!setting) throw new Error("設定が見つかりません");
 
-  const instructorIds = setting.instructorOrder.split(",").filter(Boolean);
-  if (instructorIds.length === 0) throw new Error("講師が設定されていません");
+  const entries = setting.instructorOrder.split(",").filter(Boolean);
+  if (entries.length === 0) throw new Error("講師が設定されていません");
+
+  // "id:startTime-endTime" or "id" 形式をパース
+  const parsed = entries.map((entry) => {
+    const [idPart, timePart] = entry.split(":");
+    if (timePart && timePart.includes("-")) {
+      const [s, e] = timePart.split("-");
+      return { instructorId: idPart, startTime: s, endTime: e };
+    }
+    return { instructorId: entry, startTime: setting.startTime, endTime: setting.endTime };
+  });
 
   const startDate = new Date(setting.startDate);
   const groupId = randomUUID();
 
   let current = new Date(startDate);
   while (current.getDay() !== setting.dayOfWeek) current.setDate(current.getDate() + 1);
-
-  const hasTime = setting.startTime && setting.startTime !== "";
-  const [startH, startM] = hasTime ? setting.startTime.split(":").map(Number) : [10, 0];
-  const [endH, endM] = setting.endTime ? setting.endTime.split(":").map(Number) : [0, 0];
 
   await prisma.schedule.deleteMany({
     where: { recurrenceGroupId: { startsWith: `rotation_${settingId}` } },
@@ -151,12 +157,16 @@ export async function generateRotationSchedules(settingId: string) {
     const date = new Date(current);
     date.setDate(current.getDate() + week * 7);
 
-    const instructorId = instructorIds[week % instructorIds.length];
+    const entry = parsed[week % parsed.length];
+    const hasTime = entry.startTime && entry.startTime !== "" && entry.startTime !== "00:00";
+    const [startH, startM] = hasTime ? entry.startTime.split(":").map(Number) : [0, 0];
+    const [endH, endM] = entry.endTime && entry.endTime !== "00:00" ? entry.endTime.split(":").map(Number) : [0, 0];
+
     const scheduledAt = new Date(date);
     scheduledAt.setHours(startH, startM, 0, 0);
 
     let endAt: Date | null = null;
-    if (setting.endTime && setting.endTime !== "") {
+    if (endH || endM) {
       endAt = new Date(date);
       endAt.setHours(endH, endM, 0, 0);
     }
@@ -165,7 +175,7 @@ export async function generateRotationSchedules(settingId: string) {
       data: {
         category: setting.category,
         title: catInfo.label,
-        instructorId,
+        instructorId: entry.instructorId,
         scheduledAt,
         endAt,
         status: "scheduled",
