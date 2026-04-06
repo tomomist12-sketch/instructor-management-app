@@ -126,7 +126,8 @@ export async function notifySchedule(id: string) {
     `🕐 ${dateStr}` +
     (schedule.participantName ? `\n👥 参加者: ${schedule.participantName}` : "") +
     (schedule.memo ? `\n📝 ${schedule.memo}` : "") +
-    `\n━━━━━━━━━━━━━━`
+    `\n━━━━━━━━━━━━━━` +
+    `\n詳細はこちら\nhttps://app-xi-three-29.vercel.app/`
   );
 
   if (!ok) throw new Error("LINE通知の送信に失敗しました。設定を確認してください。");

@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
   }
 
   message += `\n━━━━━━━━━━━━━━\n合計 ${schedules.length}件`;
+  message += `\n\n詳細はこちら\nhttps://app-xi-three-29.vercel.app/`;
 
   const ok = await sendLineNotification(message);
 
