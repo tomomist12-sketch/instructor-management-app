@@ -34,13 +34,13 @@ export function SimpleModal({
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/20 backdrop-blur-xs"
       onMouseDown={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
     >
       <div
-        className={`relative w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto rounded-xl bg-background p-5 shadow-lg ring-1 ring-foreground/10 ${className}`}
+        className={`relative w-full max-w-md mx-0 sm:mx-4 max-h-[85vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-background p-4 sm:p-5 shadow-lg ring-1 ring-foreground/10 ${className}`}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-medium">{title}</h2>

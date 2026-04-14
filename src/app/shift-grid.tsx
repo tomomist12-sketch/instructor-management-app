@@ -242,7 +242,7 @@ function CellDropdown({
 
 export function ShiftGrid({ instructors, schedules }: Props) {
   const [baseDate, setBaseDate] = useState(() => new Date());
-  const [view, setView] = useState<ViewMode>("month");
+  const [view, setView] = useState<ViewMode>(() => typeof window !== "undefined" && window.innerWidth < 768 ? "week" : "month");
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<Schedule | null>(null);
   const [editTime, setEditTime] = useState("");
@@ -387,7 +387,7 @@ export function ShiftGrid({ instructors, schedules }: Props) {
   return (
     <div className="space-y-4">
       {/* ナビ + ビュー切替 */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
         <Button variant="outline" size="sm" onClick={() => {
           const d = new Date(baseDate);
           if (view === "month") d.setMonth(d.getMonth() - 1);
@@ -408,24 +408,26 @@ export function ShiftGrid({ instructors, schedules }: Props) {
           <ChevronRight className="h-4 w-4" />
         </Button>
 
-        <span className="text-sm font-medium ml-1">
+        <span className="text-xs sm:text-sm font-medium ml-1">
           {view === "month"
             ? dates[0].toLocaleDateString("ja-JP", { year: "numeric", month: "long" })
             : `${dates[0].toLocaleDateString("ja-JP", { month: "short", day: "numeric" })} 〜 ${dates[dates.length - 1].toLocaleDateString("ja-JP", { month: "short", day: "numeric" })}`
           }
         </span>
 
-        <div className="flex gap-0.5 ml-auto rounded-lg border p-0.5">
+        <div className="flex gap-0.5 rounded-lg border p-0.5 ml-auto">
           {(["week", "2weeks", "month"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${view === v ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+              className={`rounded-md px-2 sm:px-3 py-1 text-xs font-medium transition-colors ${view === v ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
             >
-              {v === "week" ? "週" : v === "2weeks" ? "2週間" : "月"}
+              {v === "week" ? "週" : v === "2weeks" ? "2週" : "月"}
             </button>
           ))}
         </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
         {saving && <span className="text-xs text-muted-foreground">保存中...</span>}
         <Button
           variant="outline"
@@ -449,7 +451,7 @@ export function ShiftGrid({ instructors, schedules }: Props) {
           }}
           className="text-xs"
         >
-          📅 Googleカレンダー同期
+          📅 Gcal同期
         </Button>
       </div>
 
@@ -468,12 +470,12 @@ export function ShiftGrid({ instructors, schedules }: Props) {
 
       {/* グリッド */}
       <div className="overflow-auto border rounded-lg max-h-[75vh]">
-        <table className="w-full text-sm border-collapse min-w-[600px]">
+        <table className="w-full text-xs sm:text-sm border-collapse">
           <thead className="sticky top-0 z-20">
             <tr className="border-b bg-muted">
-              <th className="text-left p-2 font-medium w-20 sticky left-0 bg-muted z-30 border-r">日付</th>
+              <th className="text-left p-1.5 sm:p-2 font-medium w-14 sm:w-20 sticky left-0 bg-muted z-30 border-r">日付</th>
               {instructors.map((inst) => (
-                <th key={inst.id} className="text-center p-2 font-medium min-w-[130px] border-r last:border-r-0 bg-muted">
+                <th key={inst.id} className="text-center p-1 sm:p-2 font-medium min-w-[80px] sm:min-w-[130px] border-r last:border-r-0 bg-muted">
                   {inst.name}
                 </th>
               ))}
@@ -488,10 +490,10 @@ export function ShiftGrid({ instructors, schedules }: Props) {
 
               return (
                 <tr key={dateKey} className={`border-b ${isWeekend ? "bg-pink-50/60" : ""} ${isToday ? "bg-blue-50/60" : ""}`}>
-                  <td className={`p-2 sticky left-0 z-10 border-r ${isWeekend ? "bg-pink-50/60" : isToday ? "bg-blue-50/60" : "bg-background"}`}>
+                  <td className={`p-1 sm:p-2 sticky left-0 z-10 border-r ${isWeekend ? "bg-pink-50/60" : isToday ? "bg-blue-50/60" : "bg-background"}`}>
                     <div className="text-xs font-medium">{date.getMonth() + 1}/{date.getDate()}</div>
                     <div className={`text-xs ${dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-500" : "text-muted-foreground"}`}>
-                      ({dayNames[dow]})
+                      {dayNames[dow]}
                     </div>
                   </td>
                   {instructors.map((inst) => {
