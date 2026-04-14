@@ -476,8 +476,8 @@ export function ShiftGrid({ instructors, schedules }: Props) {
               const isToday = dateKey === todayKey;
 
               return (
-                <tr key={dateKey} className={`border-b ${isWeekend ? "bg-pink-50/60" : ""} ${isToday ? "bg-blue-50/60" : ""}`}>
-                  <td className={`p-1 sm:p-2 sticky left-0 z-10 border-r ${isWeekend ? "bg-pink-50/60" : isToday ? "bg-blue-50/60" : "bg-background"}`}>
+                <tr key={dateKey} className={`border-b ${isWeekend ? "bg-pink-50/60" : ""} ${isToday ? "bg-blue-100" : ""}`}>
+                  <td className={`p-1 sm:p-2 sticky left-0 z-10 border-r ${isWeekend ? "bg-pink-50/60" : isToday ? "bg-blue-100" : "bg-background"}`}>
                     <div className="text-xs font-medium">{date.getMonth() + 1}/{date.getDate()}</div>
                     <div className={`text-xs ${dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-500" : "text-muted-foreground"}`}>
                       {dayNames[dow]}
