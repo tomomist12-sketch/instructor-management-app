@@ -90,6 +90,8 @@ function CellDropdown({
   }, [open]);
 
   const [dragOver, setDragOver] = useState(false);
+  const [customInput, setCustomInput] = useState(false);
+  const [customText, setCustomText] = useState("");
 
   return (
     <div
@@ -128,7 +130,7 @@ function CellDropdown({
                 })()}
               >
                 {s.isRecurring && <Repeat className="h-2.5 w-2.5 shrink-0" />}
-                {cat.label}
+                {s.category === "custom" && s.title ? s.title : cat.label}
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onNotify(s.id); }}
@@ -176,6 +178,48 @@ function CellDropdown({
               </button>
             );
           })}
+          <div className="border-t my-1" />
+          {customInput ? (
+            <div className="px-2 py-1 space-y-1">
+              <input
+                type="text"
+                value={customText}
+                onChange={(e) => setCustomText(e.target.value)}
+                placeholder="予定名を入力"
+                className="w-full rounded border px-2 py-1 text-xs"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customText.trim()) {
+                    onAdd(dateKey, instructorId, `custom:${customText.trim()}`);
+                    setCustomText("");
+                    setCustomInput(false);
+                    setOpen(false);
+                  }
+                  if (e.key === "Escape") { setCustomInput(false); setCustomText(""); }
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (customText.trim()) {
+                    onAdd(dateKey, instructorId, `custom:${customText.trim()}`);
+                    setCustomText("");
+                    setCustomInput(false);
+                    setOpen(false);
+                  }
+                }}
+                className="w-full text-center py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
+              >
+                追加
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setCustomInput(true)}
+              className="w-full text-left px-2 py-1.5 text-xs hover:bg-accent text-muted-foreground"
+            >
+              ✏️ 自由入力...
+            </button>
+          )}
           {items.length > 0 && (
             <>
               <div className="border-t my-1" />
@@ -224,8 +268,15 @@ export function ShiftGrid({ instructors, schedules }: Props) {
     setSaving(true);
     try {
       const fd = new FormData();
-      fd.set("category", category);
-      fd.set("title", "");
+      // "custom:テキスト" 形式の場合はカスタム予定として処理
+      if (category.startsWith("custom:")) {
+        const customTitle = category.substring(7);
+        fd.set("category", "custom");
+        fd.set("title", customTitle);
+      } else {
+        fd.set("category", category);
+        fd.set("title", "");
+      }
       fd.set("instructorId", instructorId);
       fd.set("participantName", "");
       fd.set("scheduledAt", `${dateKey}T10:00`);
