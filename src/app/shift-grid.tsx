@@ -455,19 +455,6 @@ export function ShiftGrid({ instructors, schedules }: Props) {
         </Button>
       </div>
 
-      {/* 凡例 */}
-      <div className="flex flex-wrap gap-2">
-        {CATEGORY_OPTIONS.map((opt) => {
-          const cat = getCategoryInfo(opt.value);
-          return (
-            <span key={opt.value} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${cat.color}`}>
-              <span className={`h-2 w-2 rounded-full ${cat.dotColor}`} />
-              {opt.label}
-            </span>
-          );
-        })}
-      </div>
-
       {/* グリッド */}
       <div className="overflow-auto border rounded-lg max-h-[75vh]">
         <table className="w-full text-xs sm:text-sm border-collapse">
@@ -519,6 +506,19 @@ export function ShiftGrid({ instructors, schedules }: Props) {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* 凡例 */}
+      <div className="flex flex-wrap gap-2">
+        {CATEGORY_OPTIONS.map((opt) => {
+          const cat = getCategoryInfo(opt.value);
+          return (
+            <span key={opt.value} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${cat.color}`}>
+              <span className={`h-2 w-2 rounded-full ${cat.dotColor}`} />
+              {opt.label}
+            </span>
+          );
+        })}
       </div>
 
       {/* 編集モーダル */}
