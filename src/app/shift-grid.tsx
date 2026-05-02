@@ -119,7 +119,7 @@ function CellDropdown({
                   e.dataTransfer.effectAllowed = "move";
                 }}
                 onClick={(e) => { e.stopPropagation(); onEdit(s); }}
-                className={`flex-1 rounded px-1.5 py-0.5 text-xs font-medium truncate ${cat.color} flex items-center gap-0.5 text-left hover:opacity-80 cursor-grab active:cursor-grabbing`}
+                className={`flex-1 rounded px-2 py-1 text-sm font-semibold truncate ${cat.color} flex items-center gap-0.5 text-left hover:opacity-80 cursor-grab active:cursor-grabbing`}
                 title={(() => {
                   const d = new Date(s.scheduledAt);
                   const isAllDay = d.getHours() === 0 && d.getMinutes() === 0 && !s.endAt;
@@ -457,12 +457,12 @@ export function ShiftGrid({ instructors, schedules }: Props) {
 
       {/* グリッド */}
       <div className="overflow-auto border rounded-lg max-h-[75vh]">
-        <table className="w-full text-xs sm:text-sm border-collapse">
+        <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-20">
             <tr className="border-b bg-muted">
-              <th className="text-left p-1.5 sm:p-2 font-medium w-14 sm:w-20 sticky left-0 bg-muted z-30 border-r">日付</th>
+              <th className="text-left p-1.5 sm:p-2 font-bold text-foreground w-14 sm:w-20 sticky left-0 bg-muted z-30 border-r">日付</th>
               {instructors.map((inst) => (
-                <th key={inst.id} className="text-center p-1 sm:p-2 font-medium min-w-[80px] sm:min-w-[130px] border-r last:border-r-0 bg-muted">
+                <th key={inst.id} className="text-center p-1 sm:p-2 font-bold text-foreground min-w-[80px] sm:min-w-[130px] border-r last:border-r-0 bg-muted">
                   {inst.name}
                 </th>
               ))}
