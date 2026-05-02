@@ -49,11 +49,13 @@ export default async function ConsultFlowPage() {
     consultDate = d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "long", day: "numeric", weekday: "short" });
   }
 
-  // 参加者情報（今日のコンサル全件から）
-  const participants = todayConsults.map((c) => ({
-    name: c.participantName || "",
-    instructorName: c.instructor.name,
-  }));
+  // 参加者情報（今日のコンサル全件から、「、」区切りの名前を分割）
+  const participants = todayConsults.flatMap((c) => {
+    const raw = c.participantName || "";
+    const names = raw.split(/[、,]/).map((n) => n.trim()).filter(Boolean);
+    if (names.length === 0) return [{ name: "", instructorName: c.instructor.name }];
+    return names.map((name) => ({ name, instructorName: c.instructor.name }));
+  });
 
   // コンサル一覧用データ
   const allConsults = await prisma.schedule.findMany({
