@@ -8,8 +8,7 @@ import { Sidebar } from "./sidebar";
 const pageTitles: Record<string, string> = {
   "/": "シフト一覧",
   "/rotation": "繰り返し設定",
-  "/consults": "初回コンサル一覧",
-  "/consult-flow": "初回コンサル 当日の流れ",
+  "/consult-flow": "初回コンサル",
   "/instructors": "講師管理",
   "/settings": "LINE通知設定",
 };

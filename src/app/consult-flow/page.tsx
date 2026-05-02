@@ -11,8 +11,8 @@ export default async function ConsultFlowPage() {
   const todayStart = new Date(Date.UTC(nowJST.getUTCFullYear(), nowJST.getUTCMonth(), nowJST.getUTCDate(), -9, 0, 0));
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
-  // 今日の初回コンサル
-  const todayConsult = await prisma.schedule.findFirst({
+  // 今日の初回コンサルを全件取得（参加人数・名前表示用）
+  const todayConsults = await prisma.schedule.findMany({
     where: {
       category: "first_consult",
       scheduledAt: { gte: todayStart, lt: todayEnd },
@@ -21,6 +21,8 @@ export default async function ConsultFlowPage() {
     include: { instructor: true },
     orderBy: { scheduledAt: "asc" },
   });
+
+  const todayConsult = todayConsults[0] || null;
 
   // 今日のがなければ直近の未来の初回コンサル
   const nextConsult = todayConsult || await prisma.schedule.findFirst({
@@ -47,13 +49,52 @@ export default async function ConsultFlowPage() {
     consultDate = d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "long", day: "numeric", weekday: "short" });
   }
 
+  // 参加者情報（今日のコンサル全件から）
+  const participants = todayConsults.map((c) => ({
+    name: c.participantName || "",
+    instructorName: c.instructor.name,
+  }));
+
+  // コンサル一覧用データ
+  const allConsults = await prisma.schedule.findMany({
+    where: { category: "first_consult" },
+    include: { instructor: true },
+    orderBy: { scheduledAt: "asc" },
+  });
+  const instructors = await prisma.instructor.findMany({ orderBy: { createdAt: "asc" } });
+
+  const upcomingConsults = allConsults
+    .filter((c) => c.status === "scheduled" && new Date(c.scheduledAt) >= new Date())
+    .map((c) => ({
+      id: c.id,
+      scheduledAt: c.scheduledAt.toISOString(),
+      endAt: c.endAt?.toISOString() || null,
+      instructorName: c.instructor.name,
+      participantName: c.participantName,
+      memo: c.memo,
+    }));
+
+  const pastConsults = allConsults
+    .filter((c) => c.status !== "scheduled" || new Date(c.scheduledAt) < new Date())
+    .map((c) => ({
+      id: c.id,
+      scheduledAt: c.scheduledAt.toISOString(),
+      instructorName: c.instructor.name,
+      participantName: c.participantName,
+      status: c.status,
+    }));
+
   return (
     <ConsultFlowClient
       zoomUrl={zoomUrl}
       consultTime={consultTime}
       consultDate={consultDate}
-      isToday={!!todayConsult}
+      isToday={todayConsults.length > 0}
       instructorName={nextConsult?.instructor?.name || ""}
+      participants={participants}
+      upcomingConsults={upcomingConsults}
+      pastConsults={pastConsults}
+      instructors={instructors.map((i) => ({ id: i.id, name: i.name }))}
     />
   );
 }
