@@ -2,10 +2,10 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { getCategoryInfo, CATEGORIES, CATEGORY_OPTIONS } from "@/lib/categories";
+import { getCategoryInfo, CATEGORY_OPTIONS } from "@/lib/categories";
 import { createSchedule, deleteSchedule, deleteRecurrenceGroup, deleteRecurrenceFromDate, notifySchedule, updateSchedule } from "@/app/actions/schedules";
 import { SimpleModal } from "@/components/simple-modal";
-import { ChevronLeft, ChevronRight, ChevronDown, Trash2, Send, Repeat, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Send, Repeat, X } from "lucide-react";
 
 type Schedule = {
   id: string;
@@ -96,7 +96,7 @@ function CellDropdown({
   return (
     <div
       ref={ref}
-      className={`relative min-h-[40px] transition-colors ${dragOver ? "bg-blue-100/60 ring-2 ring-blue-300 ring-inset rounded" : ""}`}
+      className={`relative min-h-[44px] rounded-md transition-colors ${dragOver ? "bg-primary/10 ring-2 ring-primary/30 ring-inset" : "hover:bg-accent/25"}`}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => {
@@ -107,11 +107,11 @@ function CellDropdown({
       }}
     >
       {/* バッジ表示 */}
-      <div className="space-y-0.5">
+      <div className="space-y-1">
         {items.map((s) => {
           const cat = getCategoryInfo(s.category);
           return (
-            <div key={s.id} className="group flex items-center gap-0.5">
+            <div key={s.id} className="group flex items-center gap-1">
               <button
                 draggable
                 onDragStart={(e) => {
@@ -119,7 +119,7 @@ function CellDropdown({
                   e.dataTransfer.effectAllowed = "move";
                 }}
                 onClick={(e) => { e.stopPropagation(); onEdit(s); }}
-                className={`flex-1 rounded px-2 py-1 text-sm font-semibold truncate ${cat.color} flex items-center gap-0.5 text-left hover:opacity-80 cursor-grab active:cursor-grabbing`}
+                className={`flex-1 rounded-md px-2 py-1 text-xs sm:text-sm font-semibold truncate ${cat.color} flex items-center gap-1 text-left shadow-sm transition-all hover:-translate-y-px hover:shadow cursor-grab active:cursor-grabbing`}
                 title={(() => {
                   const d = new Date(s.scheduledAt);
                   const isAllDay = d.getHours() === 0 && d.getMinutes() === 0 && !s.endAt;
@@ -134,14 +134,14 @@ function CellDropdown({
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onNotify(s.id); }}
-                className="hidden group-hover:block text-blue-500 hover:text-blue-700"
+                className="hidden h-5 w-5 items-center justify-center rounded-md bg-sky-50 text-sky-500 hover:bg-sky-100 hover:text-sky-700 group-hover:inline-flex"
                 title="LINE通知"
               >
                 <Send className="h-3 w-3" />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}
-                className="hidden group-hover:block text-red-400 hover:text-red-600"
+                className="hidden h-5 w-5 items-center justify-center rounded-md bg-rose-50 text-rose-400 hover:bg-rose-100 hover:text-rose-600 group-hover:inline-flex"
                 title="削除"
               >
                 <X className="h-3 w-3" />
@@ -154,14 +154,14 @@ function CellDropdown({
       {/* ▼ ドロップダウントリガー */}
       <button
         onClick={() => setOpen(!open)}
-        className="absolute top-0 right-0 p-0.5 text-muted-foreground/40 hover:text-muted-foreground"
+        className="absolute right-0 top-0 rounded-md p-0.5 text-muted-foreground/45 hover:bg-background/80 hover:text-muted-foreground"
       >
         <ChevronDown className="h-3 w-3" />
       </button>
 
       {/* ドロップダウンメニュー */}
       {open && (
-        <div className="absolute top-full left-0 z-50 mt-1 w-36 rounded-md border bg-background shadow-lg py-1">
+        <div className="absolute left-0 top-full z-50 mt-1 w-40 rounded-lg border border-border bg-popover p-1 shadow-lg">
           {CATEGORY_OPTIONS.map((opt) => {
             const cat = getCategoryInfo(opt.value);
             return (
@@ -171,14 +171,14 @@ function CellDropdown({
                   onAdd(dateKey, instructorId, opt.value);
                   setOpen(false);
                 }}
-                className="w-full text-left px-2 py-1.5 text-xs hover:bg-accent flex items-center gap-2"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium hover:bg-accent"
               >
                 <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${cat.dotColor}`} />
                 {opt.label}
               </button>
             );
           })}
-          <div className="border-t my-1" />
+          <div className="my-1 border-t" />
           {customInput ? (
             <div className="px-2 py-1 space-y-1">
               <input
@@ -186,7 +186,7 @@ function CellDropdown({
                 value={customText}
                 onChange={(e) => setCustomText(e.target.value)}
                 placeholder="予定名を入力"
-                className="w-full rounded border px-2 py-1 text-xs"
+                className="w-full rounded-md border border-input bg-background/90 px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && customText.trim()) {
@@ -207,7 +207,7 @@ function CellDropdown({
                     setOpen(false);
                   }
                 }}
-                className="w-full text-center py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
+                className="w-full rounded-md bg-primary py-1 text-center text-xs text-primary-foreground hover:bg-primary/90"
               >
                 追加
               </button>
@@ -215,20 +215,21 @@ function CellDropdown({
           ) : (
             <button
               onClick={() => setCustomInput(true)}
-              className="w-full text-left px-2 py-1.5 text-xs hover:bg-accent text-muted-foreground"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              ✏️ 自由入力...
+              <Pencil className="h-3 w-3" />
+              自由入力...
             </button>
           )}
           {items.length > 0 && (
             <>
-              <div className="border-t my-1" />
+              <div className="my-1 border-t" />
               <button
                 onClick={() => {
                   items.forEach((s) => onDelete(s.id));
                   setOpen(false);
                 }}
-                className="w-full text-left px-2 py-1.5 text-xs text-destructive hover:bg-accent"
+                className="w-full rounded-md px-2 py-1.5 text-left text-xs text-destructive hover:bg-destructive/10"
               >
                 全てクリア
               </button>
@@ -242,7 +243,7 @@ function CellDropdown({
 
 export function ShiftGrid({ instructors, schedules }: Props) {
   const [baseDate, setBaseDate] = useState(() => new Date());
-  const [view, setView] = useState<ViewMode>(() => typeof window !== "undefined" && window.innerWidth < 768 ? "week" : "month");
+  const [view, setView] = useState<ViewMode>("month");
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<Schedule | null>(null);
   const [editTime, setEditTime] = useState("");
@@ -253,6 +254,10 @@ export function ShiftGrid({ instructors, schedules }: Props) {
   const [editLoading, setEditLoading] = useState(false);
 
   const dates = useMemo(() => getGridDates(baseDate, view), [baseDate, view]);
+
+  useEffect(() => {
+    if (window.innerWidth < 768) setView("week");
+  }, []);
 
   const scheduleMap = useMemo(() => {
     const map: Record<string, Schedule[]> = {};
@@ -386,83 +391,86 @@ export function ShiftGrid({ instructors, schedules }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* ナビ + ビュー切替 */}
-      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-        <Button variant="outline" size="sm" onClick={() => {
-          const d = new Date(baseDate);
-          if (view === "month") d.setMonth(d.getMonth() - 1);
-          else if (view === "2weeks") d.setDate(d.getDate() - 14);
-          else d.setDate(d.getDate() - 7);
-          setBaseDate(d);
-        }}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => setBaseDate(new Date())}>今日</Button>
-        <Button variant="outline" size="sm" onClick={() => {
-          const d = new Date(baseDate);
-          if (view === "month") d.setMonth(d.getMonth() + 1);
-          else if (view === "2weeks") d.setDate(d.getDate() + 14);
-          else d.setDate(d.getDate() + 7);
-          setBaseDate(d);
-        }}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+      <div className="rounded-lg border border-border bg-card p-2.5 shadow-sm sm:p-3">
+        {/* ナビ + ビュー切替 */}
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <Button variant="outline" size="sm" className="bg-background font-medium shadow-sm hover:bg-accent" onClick={() => {
+            const d = new Date(baseDate);
+            if (view === "month") d.setMonth(d.getMonth() - 1);
+            else if (view === "2weeks") d.setDate(d.getDate() - 14);
+            else d.setDate(d.getDate() - 7);
+            setBaseDate(d);
+          }}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="sm" className="bg-background font-medium shadow-sm hover:bg-accent" onClick={() => setBaseDate(new Date())}>今日</Button>
+          <Button variant="outline" size="sm" className="bg-background font-medium shadow-sm hover:bg-accent" onClick={() => {
+            const d = new Date(baseDate);
+            if (view === "month") d.setMonth(d.getMonth() + 1);
+            else if (view === "2weeks") d.setDate(d.getDate() + 14);
+            else d.setDate(d.getDate() + 7);
+            setBaseDate(d);
+          }}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
 
-        <span className="text-xs sm:text-sm font-medium ml-1">
-          {view === "month"
-            ? dates[0].toLocaleDateString("ja-JP", { year: "numeric", month: "long" })
-            : `${dates[0].toLocaleDateString("ja-JP", { month: "short", day: "numeric" })} 〜 ${dates[dates.length - 1].toLocaleDateString("ja-JP", { month: "short", day: "numeric" })}`
-          }
-        </span>
-
-        <div className="flex gap-0.5 rounded-lg border p-0.5 ml-auto">
-          {(["week", "2weeks", "month"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`rounded-md px-2 sm:px-3 py-1 text-xs font-medium transition-colors ${view === v ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-            >
-              {v === "week" ? "週" : v === "2weeks" ? "2週" : "月"}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {saving && <span className="text-xs text-muted-foreground">保存中...</span>}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            setSaving(true);
-            try {
-              const res = await fetch("/api/cron/sync-calendar?manual=1");
-              const data = await res.json();
-              if (data.ok) {
-                alert(`Googleカレンダー同期完了：${data.created}件追加（${data.skipped}件スキップ）`);
-                window.location.reload();
-              } else {
-                alert("同期エラー: " + (data.error || "不明"));
-              }
-            } catch {
-              alert("同期に失敗しました");
-            } finally {
-              setSaving(false);
+          <span className="ml-1 rounded-md bg-accent px-2 py-1 text-xs font-bold text-foreground sm:text-sm">
+            {view === "month"
+              ? dates[0].toLocaleDateString("ja-JP", { year: "numeric", month: "long" })
+              : `${dates[0].toLocaleDateString("ja-JP", { month: "short", day: "numeric" })} 〜 ${dates[dates.length - 1].toLocaleDateString("ja-JP", { month: "short", day: "numeric" })}`
             }
-          }}
-          className="text-xs"
-        >
-          📅 Gcal同期
-        </Button>
+          </span>
+
+          <div className="ml-auto flex gap-0.5 rounded-lg border border-border bg-background p-0.5 shadow-sm">
+            {(["week", "2weeks", "month"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors sm:px-3 ${view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+              >
+                {v === "week" ? "週" : v === "2weeks" ? "2週" : "月"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {saving && <span className="text-xs font-medium text-muted-foreground">保存中...</span>}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              setSaving(true);
+              try {
+                const res = await fetch("/api/cron/sync-calendar?manual=1");
+                const data = await res.json();
+                if (data.ok) {
+                  alert(`Googleカレンダー同期完了：${data.created}件追加（${data.skipped}件スキップ）`);
+                  window.location.reload();
+                } else {
+                  alert("同期エラー: " + (data.error || "不明"));
+                }
+              } catch {
+                alert("同期に失敗しました");
+              } finally {
+                setSaving(false);
+              }
+            }}
+            className="bg-background text-xs font-medium shadow-sm hover:bg-accent"
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Gcal同期
+          </Button>
+        </div>
       </div>
 
       {/* グリッド */}
-      <div className="overflow-auto border rounded-lg max-h-[75vh]">
+      <div className="max-h-[75vh] overflow-auto rounded-lg border border-border bg-card shadow-sm">
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-20">
-            <tr className="border-b bg-muted">
-              <th className="text-left p-1.5 sm:p-2 font-bold text-foreground w-14 sm:w-20 sticky left-0 bg-muted z-30 border-r">日付</th>
+            <tr className="border-b border-border bg-secondary">
+              <th className="sticky left-0 z-30 w-14 border-r border-border bg-secondary p-1.5 text-left font-bold text-foreground sm:w-20 sm:p-2">日付</th>
               {instructors.map((inst) => (
-                <th key={inst.id} className="text-center p-1 sm:p-2 font-bold text-foreground min-w-[80px] sm:min-w-[130px] border-r last:border-r-0 bg-muted">
+                <th key={inst.id} className="min-w-[80px] border-r border-border bg-secondary p-1 text-center font-bold text-foreground last:border-r-0 sm:min-w-[130px] sm:p-2">
                   {inst.name}
                 </th>
               ))}
@@ -476,10 +484,10 @@ export function ShiftGrid({ instructors, schedules }: Props) {
               const isToday = dateKey === todayKey;
 
               return (
-                <tr key={dateKey} className={`border-b ${isWeekend ? "bg-pink-50/60" : ""} ${isToday ? "bg-blue-100" : ""}`}>
-                  <td className={`p-1 sm:p-2 sticky left-0 z-10 border-r ${isWeekend ? "bg-pink-50/60" : isToday ? "bg-blue-100" : "bg-background"}`}>
-                    <div className="text-xs font-medium">{date.getMonth() + 1}/{date.getDate()}</div>
-                    <div className={`text-xs ${dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-500" : "text-muted-foreground"}`}>
+                <tr key={dateKey} className={`border-b border-border/30 transition-colors hover:bg-accent/40 ${isWeekend ? "bg-[#f7eee9]" : ""} ${isToday ? "bg-accent" : ""}`}>
+                  <td className={`sticky left-0 z-10 border-r border-border p-1 sm:p-2 ${isWeekend ? "bg-[#f7eee9]" : isToday ? "bg-accent" : "bg-card"}`}>
+                    <div className={`text-xs font-bold ${isToday ? "text-primary" : "text-foreground"}`}>{date.getMonth() + 1}/{date.getDate()}</div>
+                    <div className={`text-xs font-medium ${dow === 0 ? "text-rose-500" : dow === 6 ? "text-sky-500" : "text-muted-foreground"}`}>
                       {dayNames[dow]}
                     </div>
                   </td>
@@ -487,7 +495,7 @@ export function ShiftGrid({ instructors, schedules }: Props) {
                     const key = `${dateKey}_${inst.id}`;
                     const items = scheduleMap[key] || [];
                     return (
-                      <td key={inst.id} className="p-1 align-top border-r last:border-r-0">
+                      <td key={inst.id} className="border-r border-border/20 p-1 align-top last:border-r-0">
                         <CellDropdown
                           dateKey={dateKey}
                           instructorId={inst.id}
@@ -509,11 +517,11 @@ export function ShiftGrid({ instructors, schedules }: Props) {
       </div>
 
       {/* 凡例 */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
         {CATEGORY_OPTIONS.map((opt) => {
           const cat = getCategoryInfo(opt.value);
           return (
-            <span key={opt.value} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${cat.color}`}>
+            <span key={opt.value} className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold ${cat.color} shadow-sm`}>
               <span className={`h-2 w-2 rounded-full ${cat.dotColor}`} />
               {opt.label}
             </span>

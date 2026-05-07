@@ -13,18 +13,26 @@ const navItems = [
   { href: "/rotation", label: "繰り返し設定", icon: RotateCw },
 ];
 
-export function Sidebar() {
+export function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex md:w-56 md:flex-col border-r border-border bg-sidebar">
-      <div className="flex h-14 items-center gap-2 border-b border-border px-5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground font-bold text-xs">
+    <aside
+      className={cn(
+        "flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        mobile ? "h-full w-full" : "hidden md:flex md:w-60"
+      )}
+    >
+      <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-sidebar-border bg-accent text-foreground text-xs font-bold shadow-sm">
           IM
         </div>
-        <h1 className="text-sm font-bold">講師業務管理</h1>
+        <div>
+          <h1 className="text-sm font-bold tracking-wide">講師業務管理</h1>
+          <p className="text-[11px] font-medium text-muted-foreground">Instructor Board</p>
+        </div>
       </div>
-      <nav className="flex-1 space-y-0.5 px-3 py-3">
+      <nav className="flex-1 space-y-1.5 px-3 py-4">
         {navItems.map((item) => {
           const isActive =
             item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -33,13 +41,20 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-all",
                 isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                  ? "border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground font-semibold shadow-sm"
+                  : "border-transparent text-sidebar-foreground/80 hover:border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
             >
-              <item.icon className="h-4 w-4" />
+              <span
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
+                  isActive ? "border-white/35 bg-white/15 text-sidebar-primary-foreground" : "border-sidebar-border bg-white text-foreground"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+              </span>
               {item.label}
             </Link>
           );

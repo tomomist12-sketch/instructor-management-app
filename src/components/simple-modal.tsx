@@ -40,14 +40,14 @@ export function SimpleModal({
       }}
     >
       <div
-        className={`relative w-full max-w-md mx-0 sm:mx-4 max-h-[85vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-background p-4 sm:p-5 shadow-lg ring-1 ring-foreground/10 ${className}`}
+        className={`relative w-full max-w-md mx-0 sm:mx-4 max-h-[85vh] overflow-y-auto rounded-t-lg border border-border bg-card p-4 shadow-lg sm:rounded-lg sm:p-5 ${className}`}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-medium">{title}</h2>
+          <h2 className="text-base font-bold">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 hover:bg-accent"
+            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
