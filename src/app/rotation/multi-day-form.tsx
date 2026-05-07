@@ -65,16 +65,19 @@ export function MultiDayForm({ category, categoryLabel, instructors, existingSet
   }
 
   async function handleSave() {
+    if (instructors.length === 0) { setMessage({ type: "error", text: "講師が登録されていません" }); return; }
+    const hasEnabled = days.some((d) => d.enabled);
+    if (!hasEnabled) { setMessage({ type: "error", text: "曜日を1つ以上選択してください" }); return; }
     setLoading(true); setMessage(null);
     try {
       const res = await fetch("/api/rotation/multi-day", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, days, startDate, weeksToGenerate }),
+        body: JSON.stringify({ category, days, startDate, weeksToGenerate, defaultInstructorId: instructors[0].id }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "保存失敗");
-      setMessage({ type: "success", text: "設定を保存しました" });
+      setMessage({ type: "success", text: `設定を保存し、${data.count}件の予定を生成しました。担当者はシフト表から手動で変更してください。` });
       // reload to get new IDs
       window.location.reload();
     } catch (e) {

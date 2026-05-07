@@ -44,11 +44,12 @@ export function FixedDayForm({ category, categoryLabel, instructors, existing, d
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   async function handleSave() {
+    if (instructors.length === 0) { setMessage({ type: "error", text: "講師が登録されていません" }); return; }
     setLoading(true); setMessage(null);
     try {
-      await saveFixedDaySetting({ id: existing?.id, category, dayOfWeek, startTime, endTime, startDate, weeksToGenerate });
-      setMessage({ type: "success", text: "設定を保存しました" });
-    } catch (e) { setMessage({ type: "error", text: "保存失敗" }); }
+      const r = await saveFixedDaySetting({ id: existing?.id, category, dayOfWeek, startTime, endTime, startDate, weeksToGenerate, defaultInstructorId: instructors[0].id });
+      setMessage({ type: "success", text: `設定を保存し、${r.count}件の予定を生成しました。担当者はシフト表のドロップダウンから個別に変更してください。` });
+    } catch (e) { setMessage({ type: "error", text: "保存失敗: " + (e instanceof Error ? e.message : "") }); }
     finally { setLoading(false); }
   }
 

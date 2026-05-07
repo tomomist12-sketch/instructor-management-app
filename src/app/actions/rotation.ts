@@ -4,14 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { getCategoryInfo } from "@/lib/categories";
+import { jstDateTime, nextDateKeyForWeekday, todayJstDateKey } from "@/lib/jst-date";
 
-// ライン返信: 曜日ごとの固定担当を保存
-export async function saveLineReplySettings(settings: { dayOfWeek: number; instructorId: string }[]) {
+// ライン返信: 曜日ごとの固定担当を保存（保存後に自動で予定を再生成）
+export async function saveLineReplySettings(settings: { dayOfWeek: number; instructorId: string }[], weeksToGenerate: number = 12) {
+  const validSettings = settings.filter((setting) => setting.instructorId);
+
   // 既存のline_reply設定を全削除
   await prisma.rotationSetting.deleteMany({ where: { category: "line_reply" } });
 
-  for (const s of settings) {
-    if (!s.instructorId) continue;
+  for (const s of validSettings) {
     await prisma.rotationSetting.create({
       data: {
         category: "line_reply",
@@ -19,12 +21,25 @@ export async function saveLineReplySettings(settings: { dayOfWeek: number; instr
         startTime: "",
         endTime: "",
         instructorOrder: s.instructorId,
-        startDate: new Date().toISOString().split("T")[0],
-        weeksToGenerate: 12,
+        startDate: todayJstDateKey(),
+        weeksToGenerate,
       },
     });
   }
+
+  if (validSettings.length === 0) {
+    await prisma.schedule.deleteMany({
+      where: { recurrenceGroupId: { startsWith: "linereply_" } },
+    });
+    revalidatePath("/rotation");
+    revalidatePath("/");
+    return { count: 0 };
+  }
+
+  // 設定保存後に予定を自動再生成
+  const result = await generateLineReplySchedules(weeksToGenerate);
   revalidatePath("/rotation");
+  return result;
 }
 
 // ライン返信の予定を自動生成
@@ -38,25 +53,19 @@ export async function generateLineReplySchedules(weeksToGenerate: number) {
     where: { recurrenceGroupId: { startsWith: "linereply_" } },
   });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = todayJstDateKey();
   let count = 0;
 
   for (let week = 0; week < weeksToGenerate; week++) {
     for (const s of settings) {
-      const date = new Date(today);
-      // 今週の該当曜日を見つける
-      const diff = (s.dayOfWeek - today.getDay() + 7) % 7;
-      date.setDate(today.getDate() + diff + week * 7);
-
-      if (date < today) continue; // 過去はスキップ
+      const dateKey = nextDateKeyForWeekday(today, s.dayOfWeek, week);
 
       await prisma.schedule.create({
         data: {
           category: "line_reply",
           title: "ライン返信",
           instructorId: s.instructorOrder,
-          scheduledAt: date,
+          scheduledAt: jstDateTime(dateKey),
           status: "scheduled",
           isRecurring: true,
           recurrenceRule: "weekly",
@@ -72,7 +81,7 @@ export async function generateLineReplySchedules(weeksToGenerate: number) {
   return { count };
 }
 
-// 初回コンサル: 週替わりローテーション
+// 初回コンサル: 週替わりローテーション（保存後に自動で予定を再生成）
 export async function saveRotationSetting(data: {
   id?: string;
   category: string;
@@ -85,6 +94,7 @@ export async function saveRotationSetting(data: {
 }) {
   const orderStr = data.instructorOrder.join(",");
 
+  let settingId: string;
   if (data.id) {
     await prisma.rotationSetting.update({
       where: { id: data.id },
@@ -98,8 +108,9 @@ export async function saveRotationSetting(data: {
         weeksToGenerate: data.weeksToGenerate,
       },
     });
+    settingId = data.id;
   } else {
-    await prisma.rotationSetting.create({
+    const created = await prisma.rotationSetting.create({
       data: {
         category: data.category,
         dayOfWeek: data.dayOfWeek,
@@ -110,8 +121,13 @@ export async function saveRotationSetting(data: {
         weeksToGenerate: data.weeksToGenerate,
       },
     });
+    settingId = created.id;
   }
+
+  // 設定保存後に予定を自動再生成
+  const result = await generateRotationSchedules(settingId);
   revalidatePath("/rotation");
+  return result;
 }
 
 export async function deleteRotationSetting(id: string) {
@@ -146,17 +162,7 @@ export async function generateRotationSchedules(settingId: string) {
     return { instructorId: entry, startTime: setting.startTime, endTime: setting.endTime };
   });
 
-  // JSTベースで日付計算するためにパース
-  const [sY, sM, sD] = setting.startDate.split("-").map(Number);
   const groupId = randomUUID();
-
-  // JST基準で開始日から該当曜日を見つける
-  let curY = sY, curM = sM, curD = sD;
-  // 仮のDateで曜日を判定（JSTとして扱うため+09:00で構築）
-  let tempDate = new Date(`${setting.startDate}T00:00:00+09:00`);
-  while (tempDate.getUTCDay() !== setting.dayOfWeek) {
-    tempDate = new Date(tempDate.getTime() + 86400000);
-  }
 
   await prisma.schedule.deleteMany({
     where: { recurrenceGroupId: { startsWith: `rotation_${settingId}` } },
@@ -166,22 +172,17 @@ export async function generateRotationSchedules(settingId: string) {
   let count = 0;
 
   for (let week = 0; week < setting.weeksToGenerate; week++) {
-    const dateMs = tempDate.getTime() + week * 7 * 86400000;
-    const weekDate = new Date(dateMs);
-    // JSTの日付文字列を取得
-    const dateStr = weekDate.toISOString().split("T")[0]; // UTC日付だがtempDateが+09:00基準なのでOK
-
+    const dateStr = nextDateKeyForWeekday(setting.startDate, setting.dayOfWeek, week);
     const entry = parsed[week % parsed.length];
     const hasTime = entry.startTime && entry.startTime !== "" && entry.startTime !== "00:00";
     const sTime = hasTime ? entry.startTime : "00:00";
     const eTime = entry.endTime && entry.endTime !== "00:00" ? entry.endTime : "";
 
-    // JST時刻として明示的に構築
-    const scheduledAt = new Date(`${dateStr}T${sTime}:00+09:00`);
+    const scheduledAt = jstDateTime(dateStr, sTime);
 
     let endAt: Date | null = null;
     if (eTime) {
-      endAt = new Date(`${dateStr}T${eTime}:00+09:00`);
+      endAt = jstDateTime(dateStr, eTime);
     }
 
     await prisma.schedule.create({
@@ -206,7 +207,7 @@ export async function generateRotationSchedules(settingId: string) {
   return { count };
 }
 
-// ライブトーク・勉強会: 固定曜日で予定を生成（担当者なし＝手動で後から選択）
+// ライブトーク・勉強会: 固定曜日で予定を生成（保存後に自動で予定を再生成）
 export async function saveFixedDaySetting(data: {
   id?: string;
   category: string;
@@ -215,7 +216,9 @@ export async function saveFixedDaySetting(data: {
   endTime: string;
   startDate: string;
   weeksToGenerate: number;
+  defaultInstructorId: string;
 }) {
+  let settingId: string;
   if (data.id) {
     await prisma.rotationSetting.update({
       where: { id: data.id },
@@ -229,8 +232,9 @@ export async function saveFixedDaySetting(data: {
         weeksToGenerate: data.weeksToGenerate,
       },
     });
+    settingId = data.id;
   } else {
-    await prisma.rotationSetting.create({
+    const created = await prisma.rotationSetting.create({
       data: {
         category: data.category,
         dayOfWeek: data.dayOfWeek,
@@ -241,22 +245,20 @@ export async function saveFixedDaySetting(data: {
         weeksToGenerate: data.weeksToGenerate,
       },
     });
+    settingId = created.id;
   }
+
+  // 設定保存後に予定を自動再生成
+  const result = await generateFixedDaySchedules(settingId, data.defaultInstructorId);
   revalidatePath("/rotation");
+  return result;
 }
 
 export async function generateFixedDaySchedules(settingId: string, defaultInstructorId: string) {
   const setting = await prisma.rotationSetting.findUnique({ where: { id: settingId } });
   if (!setting) throw new Error("設定が見つかりません");
 
-  const startDate = new Date(setting.startDate);
   const groupId = randomUUID();
-
-  let current = new Date(startDate);
-  while (current.getDay() !== setting.dayOfWeek) current.setDate(current.getDate() + 1);
-
-  const [startH, startM] = setting.startTime ? setting.startTime.split(":").map(Number) : [10, 0];
-  const [endH, endM] = setting.endTime ? setting.endTime.split(":").map(Number) : [0, 0];
 
   await prisma.schedule.deleteMany({
     where: { recurrenceGroupId: { startsWith: `fixedday_${settingId}` } },
@@ -266,16 +268,12 @@ export async function generateFixedDaySchedules(settingId: string, defaultInstru
   let count = 0;
 
   for (let week = 0; week < setting.weeksToGenerate; week++) {
-    const date = new Date(current);
-    date.setDate(current.getDate() + week * 7);
-
-    const scheduledAt = new Date(date);
-    scheduledAt.setHours(startH, startM, 0, 0);
+    const dateKey = nextDateKeyForWeekday(setting.startDate, setting.dayOfWeek, week);
+    const scheduledAt = jstDateTime(dateKey, setting.startTime || "10:00");
 
     let endAt: Date | null = null;
     if (setting.endTime) {
-      endAt = new Date(date);
-      endAt.setHours(endH, endM, 0, 0);
+      endAt = jstDateTime(dateKey, setting.endTime);
     }
 
     await prisma.schedule.create({

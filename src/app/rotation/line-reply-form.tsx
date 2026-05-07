@@ -37,8 +37,8 @@ export function LineReplyForm({ instructors, settings }: { instructors: Instruct
       const data = Object.entries(assignments)
         .filter(([, id]) => id)
         .map(([dow, id]) => ({ dayOfWeek: Number(dow), instructorId: id }));
-      await saveLineReplySettings(data);
-      setMessage({ type: "success", text: "保存しました" });
+      const r = await saveLineReplySettings(data, weeks);
+      setMessage({ type: "success", text: `設定を保存し、${r.count}件の予定を生成しました` });
     } catch (e) {
       setMessage({ type: "error", text: "保存失敗: " + (e instanceof Error ? e.message : "") });
     } finally { setLoading(false); }

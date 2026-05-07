@@ -99,8 +99,8 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
     setLoading(true); setMessage(null);
     try {
       const serialized = serializeOrder(order, perInstructorTime);
-      await saveRotationSetting({ id: existing?.id, category, dayOfWeek, startTime, endTime, instructorOrder: serialized, startDate, weeksToGenerate });
-      setMessage({ type: "success", text: "設定を保存しました" });
+      const r = await saveRotationSetting({ id: existing?.id, category, dayOfWeek, startTime, endTime, instructorOrder: serialized, startDate, weeksToGenerate });
+      setMessage({ type: "success", text: `設定を保存し、${r.count}件の予定を生成しました` });
     } catch (e) { setMessage({ type: "error", text: "保存失敗: " + (e instanceof Error ? e.message : "") }); }
     finally { setLoading(false); }
   }
@@ -126,7 +126,7 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
   const preview: { date: string; instructor: string; time: string }[] = [];
   if (order.length > 0) {
     const start = new Date(startDate);
-    let cur = new Date(start);
+    const cur = new Date(start);
     while (cur.getDay() !== dayOfWeek) cur.setDate(cur.getDate() + 1);
     for (let i = 0; i < previewWeeks; i++) {
       const d = new Date(cur); d.setDate(cur.getDate() + i * 7);

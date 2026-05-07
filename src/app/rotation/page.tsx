@@ -12,7 +12,7 @@ export default async function RotationPage() {
   return (
     <div className="space-y-8 max-w-2xl">
       <p className="text-sm text-muted-foreground">
-        各業務の繰り返しパターンを設定します。保存後に「予定を生成」でシフト表に自動反映されます。
+        各業務の繰り返しパターンを設定します。保存するとシフト表に自動反映されます。
       </p>
 
       {/* 1. ライン返信: 曜日ごと固定担当 */}

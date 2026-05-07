@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
 import { getCategoryInfo } from "@/lib/categories";
+import { jstDateTime, nextDateKeyForWeekday } from "@/lib/jst-date";
 
 export async function POST(req: NextRequest) {
   try {
     const { category, defaultInstructorId } = await req.json();
+    if (!defaultInstructorId) {
+      return NextResponse.json({ ok: false, error: "担当講師が指定されていません" }, { status: 400 });
+    }
 
     const settings = await prisma.rotationSetting.findMany({ where: { category } });
     if (settings.length === 0) {
@@ -20,29 +24,16 @@ export async function POST(req: NextRequest) {
       where: { category, recurrenceGroupId: { startsWith: `multiday_${category}` } },
     });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     let count = 0;
 
     for (const setting of settings) {
-      const [startH, startM] = setting.startTime ? setting.startTime.split(":").map(Number) : [10, 0];
-      const [endH, endM] = setting.endTime ? setting.endTime.split(":").map(Number) : [0, 0];
-
       for (let week = 0; week < setting.weeksToGenerate; week++) {
-        // 今週の該当曜日を見つける
-        const diff = (setting.dayOfWeek - today.getDay() + 7) % 7;
-        const date = new Date(today);
-        date.setDate(today.getDate() + diff + week * 7);
-
-        if (date < today) continue;
-
-        const scheduledAt = new Date(date);
-        scheduledAt.setHours(startH, startM, 0, 0);
+        const dateKey = nextDateKeyForWeekday(setting.startDate, setting.dayOfWeek, week);
+        const scheduledAt = jstDateTime(dateKey, setting.startTime || "10:00");
 
         let endAt: Date | null = null;
         if (setting.endTime && setting.endTime !== "") {
-          endAt = new Date(date);
-          endAt.setHours(endH, endM, 0, 0);
+          endAt = jstDateTime(dateKey, setting.endTime);
         }
 
         await prisma.schedule.create({
