@@ -9,6 +9,9 @@ export default async function HomePage() {
     include: { instructor: true },
     orderBy: { scheduledAt: "asc" },
   });
+  const sharedEvents = await prisma.sharedEvent.findMany({
+    orderBy: { date: "asc" },
+  });
 
   const serialized = schedules.map((s) => ({
     id: s.id,
@@ -26,10 +29,21 @@ export default async function HomePage() {
     instructorName: s.instructor.name,
   }));
 
+  const serializedSharedEvents = sharedEvents.map((e) => ({
+    id: e.id,
+    date: e.date.toISOString(),
+    startTime: e.startTime,
+    endTime: e.endTime,
+    title: e.title,
+    note: e.note,
+    createdByName: e.createdByName,
+  }));
+
   return (
     <ShiftGrid
       instructors={instructors.map((i) => ({ id: i.id, name: i.name }))}
       schedules={serialized}
+      sharedEvents={serializedSharedEvents}
     />
   );
 }

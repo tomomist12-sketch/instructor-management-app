@@ -66,6 +66,21 @@ model RotationSetting {
   @@map("rotation_settings")
 }
 
+// 全員参加予定（共有イベント）
+model SharedEvent {
+  id            String   @id @default(uuid())
+  date          DateTime // 対象日付（時刻部分は00:00:00で固定、日付のみ使用）
+  startTime     String?  @map("start_time")  // "HH:mm" 形式。任意
+  endTime       String?  @map("end_time")    // "HH:mm" 形式。任意
+  title         String   // イベント名（必須）
+  note          String?  // メモ（任意）
+  createdByName String?  @map("created_by_name") // 登録者名
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("shared_events")
+}
+
 // LINE通知タイミング設定
 model NotificationSetting {
   id        String @id @default(uuid())

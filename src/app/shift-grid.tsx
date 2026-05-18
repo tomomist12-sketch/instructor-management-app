@@ -4,8 +4,9 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { getCategoryInfo, CATEGORY_OPTIONS } from "@/lib/categories";
 import { createSchedule, deleteSchedule, deleteRecurrenceGroup, deleteRecurrenceFromDate, notifySchedule, updateSchedule } from "@/app/actions/schedules";
+import { createSharedEvent, updateSharedEvent, deleteSharedEvent } from "@/app/actions/shared-events";
 import { SimpleModal } from "@/components/simple-modal";
-import { CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Send, Repeat, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Send, Repeat, X, Users } from "lucide-react";
 
 type Schedule = {
   id: string;
@@ -23,9 +24,20 @@ type Schedule = {
   instructorName: string;
 };
 
+type SharedEvent = {
+  id: string;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  title: string;
+  note: string | null;
+  createdByName: string | null;
+};
+
 type Props = {
   instructors: { id: string; name: string }[];
   schedules: Schedule[];
+  sharedEvents: SharedEvent[];
 };
 
 function toDateKey(d: Date): string {
@@ -241,7 +253,7 @@ function CellDropdown({
   );
 }
 
-export function ShiftGrid({ instructors, schedules }: Props) {
+export function ShiftGrid({ instructors, schedules, sharedEvents }: Props) {
   const [baseDate, setBaseDate] = useState(() => new Date());
   const [view, setView] = useState<ViewMode>("month");
   const [saving, setSaving] = useState(false);
@@ -252,6 +264,16 @@ export function ShiftGrid({ instructors, schedules }: Props) {
   const [editMemo, setEditMemo] = useState("");
   const [editAllDay, setEditAllDay] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
+
+  // 全員参加予定の追加・編集用 state
+  const [sharedModalOpen, setSharedModalOpen] = useState(false);
+  const [sharedEditItem, setSharedEditItem] = useState<SharedEvent | null>(null);
+  const [sharedDate, setSharedDate] = useState("");
+  const [sharedTitle, setSharedTitle] = useState("");
+  const [sharedStartTime, setSharedStartTime] = useState("");
+  const [sharedEndTime, setSharedEndTime] = useState("");
+  const [sharedNote, setSharedNote] = useState("");
+  const [sharedLoading, setSharedLoading] = useState(false);
 
   const dates = useMemo(() => getGridDates(baseDate, view), [baseDate, view]);
 
@@ -268,6 +290,70 @@ export function ShiftGrid({ instructors, schedules }: Props) {
     }
     return map;
   }, [schedules]);
+
+  const sharedEventMap = useMemo(() => {
+    const map: Record<string, SharedEvent[]> = {};
+    for (const e of sharedEvents) {
+      const key = toDateKey(new Date(e.date));
+      if (!map[key]) map[key] = [];
+      map[key].push(e);
+    }
+    return map;
+  }, [sharedEvents]);
+
+  function openSharedAdd() {
+    setSharedEditItem(null);
+    setSharedDate(toDateKey(new Date()));
+    setSharedTitle("");
+    setSharedStartTime("");
+    setSharedEndTime("");
+    setSharedNote("");
+    setSharedModalOpen(true);
+  }
+
+  function openSharedEdit(e: SharedEvent) {
+    setSharedEditItem(e);
+    setSharedDate(toDateKey(new Date(e.date)));
+    setSharedTitle(e.title);
+    setSharedStartTime(e.startTime || "");
+    setSharedEndTime(e.endTime || "");
+    setSharedNote(e.note || "");
+    setSharedModalOpen(true);
+  }
+
+  async function handleSharedSave() {
+    if (!sharedTitle.trim() || !sharedDate) return;
+    setSharedLoading(true);
+    try {
+      const fd = new FormData();
+      fd.set("date", sharedDate);
+      fd.set("title", sharedTitle.trim());
+      fd.set("startTime", sharedStartTime);
+      fd.set("endTime", sharedEndTime);
+      fd.set("note", sharedNote);
+      if (sharedEditItem) {
+        await updateSharedEvent(sharedEditItem.id, fd);
+      } else {
+        fd.set("createdByName", "");
+        await createSharedEvent(fd);
+      }
+      setSharedModalOpen(false);
+    } catch (e) {
+      alert("保存失敗: " + (e instanceof Error ? e.message : ""));
+    } finally {
+      setSharedLoading(false);
+    }
+  }
+
+  async function handleSharedDelete(id: string) {
+    if (!confirm("この全員参加の予定を削除しますか？")) return;
+    try {
+      await deleteSharedEvent(id);
+      setSharedModalOpen(false);
+    } catch {
+      alert("削除失敗");
+    }
+  }
 
   async function handleAdd(dateKey: string, instructorId: string, category: string) {
     setSaving(true);
@@ -460,6 +546,15 @@ export function ShiftGrid({ instructors, schedules }: Props) {
             <CalendarDays className="h-3.5 w-3.5" />
             Gcal同期
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openSharedAdd}
+            className="bg-background text-xs font-medium shadow-sm hover:bg-accent"
+          >
+            <Users className="h-3.5 w-3.5" />
+            全員参加の予定を追加
+          </Button>
         </div>
       </div>
 
@@ -482,33 +577,61 @@ export function ShiftGrid({ instructors, schedules }: Props) {
               const dow = date.getDay();
               const isWeekend = dow === 0 || dow === 6;
               const isToday = dateKey === todayKey;
+              const daySharedEvents = sharedEventMap[dateKey] || [];
+              const rowBg = isWeekend ? "bg-[#f7eee9]" : isToday ? "bg-accent" : "";
+              const cellBg = isWeekend ? "bg-[#f7eee9]" : isToday ? "bg-accent" : "bg-card";
 
               return (
-                <tr key={dateKey} className={`border-b border-border/30 transition-colors hover:bg-accent/40 ${isWeekend ? "bg-[#f7eee9]" : ""} ${isToday ? "bg-accent" : ""}`}>
-                  <td className={`sticky left-0 z-10 border-r border-border p-1 sm:p-2 ${isWeekend ? "bg-[#f7eee9]" : isToday ? "bg-accent" : "bg-card"}`}>
+                <tr key={dateKey} className={`border-b border-border/30 transition-colors hover:bg-accent/40 ${rowBg}`}>
+                  <td className={`sticky left-0 z-10 border-r border-border p-1 sm:p-2 ${cellBg}`} rowSpan={1}>
                     <div className={`text-xs font-bold ${isToday ? "text-primary" : "text-foreground"}`}>{date.getMonth() + 1}/{date.getDate()}</div>
                     <div className={`text-xs font-medium ${dow === 0 ? "text-rose-500" : dow === 6 ? "text-sky-500" : "text-muted-foreground"}`}>
                       {dayNames[dow]}
                     </div>
                   </td>
-                  {instructors.map((inst) => {
-                    const key = `${dateKey}_${inst.id}`;
-                    const items = scheduleMap[key] || [];
-                    return (
-                      <td key={inst.id} className="border-r border-border/20 p-1 align-top last:border-r-0">
-                        <CellDropdown
-                          dateKey={dateKey}
-                          instructorId={inst.id}
-                          items={items}
-                          onAdd={handleAdd}
-                          onDelete={handleDelete}
-                          onNotify={handleNotify}
-                          onEdit={openEdit}
-                          onDrop={handleDrop}
-                        />
-                      </td>
-                    );
-                  })}
+                  <td colSpan={instructors.length} className="p-0 border-r-0">
+                    {/* 全員参加バー */}
+                    {daySharedEvents.length > 0 && (
+                      <div className="space-y-1 px-1 pt-1">
+                        {daySharedEvents.map((ev) => (
+                          <button
+                            key={ev.id}
+                            onClick={() => openSharedEdit(ev)}
+                            className="flex w-full items-center gap-2 rounded-md border-2 border-indigo-400 bg-indigo-50 px-3 py-1.5 text-left text-xs sm:text-sm font-semibold text-indigo-900 shadow-sm transition-all hover:-translate-y-px hover:shadow hover:bg-indigo-100 cursor-pointer"
+                          >
+                            <Users className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                            <span className="truncate">{ev.title}</span>
+                            {(ev.startTime || ev.endTime) && (
+                              <span className="ml-auto shrink-0 text-xs font-normal text-indigo-600">
+                                {ev.startTime || ""}{ev.startTime && ev.endTime ? "〜" : ""}{ev.endTime || ""}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {/* 個人予定グリッド */}
+                    <div className="flex">
+                      {instructors.map((inst, idx) => {
+                        const key = `${dateKey}_${inst.id}`;
+                        const items = scheduleMap[key] || [];
+                        return (
+                          <div key={inst.id} className={`flex-1 p-1 align-top ${idx < instructors.length - 1 ? "border-r border-border/20" : ""}`}>
+                            <CellDropdown
+                              dateKey={dateKey}
+                              instructorId={inst.id}
+                              items={items}
+                              onAdd={handleAdd}
+                              onDelete={handleDelete}
+                              onNotify={handleNotify}
+                              onEdit={openEdit}
+                              onDrop={handleDrop}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -527,6 +650,10 @@ export function ShiftGrid({ instructors, schedules }: Props) {
             </span>
           );
         })}
+        <span className="inline-flex items-center gap-1.5 rounded-md border-2 border-indigo-400 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-900 shadow-sm">
+          <Users className="h-3 w-3 text-indigo-500" />
+          全員参加
+        </span>
       </div>
 
       {/* 編集モーダル */}
@@ -653,6 +780,56 @@ export function ShiftGrid({ instructors, schedules }: Props) {
             </div>
           );
         })()}
+      </SimpleModal>
+
+      {/* 全員参加予定 追加・編集モーダル */}
+      <SimpleModal
+        open={sharedModalOpen}
+        onClose={() => setSharedModalOpen(false)}
+        title={sharedEditItem ? "全員参加の予定を編集" : "全員参加の予定を追加"}
+      >
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">日付 <span className="text-destructive">*</span></label>
+            <input type="date" value={sharedDate} onChange={(e) => setSharedDate(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">タイトル <span className="text-destructive">*</span></label>
+            <input type="text" value={sharedTitle} onChange={(e) => setSharedTitle(e.target.value)} placeholder="例：全体ミーティング" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">開始時刻</label>
+              <input type="time" value={sharedStartTime} onChange={(e) => setSharedStartTime(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">終了時刻</label>
+              <input type="time" value={sharedEndTime} onChange={(e) => setSharedEndTime(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">メモ</label>
+            <textarea value={sharedNote} onChange={(e) => setSharedNote(e.target.value)} rows={3} placeholder="任意のメモ" className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleSharedSave} disabled={sharedLoading || !sharedTitle.trim() || !sharedDate} className="flex-1">
+              {sharedLoading ? "保存中..." : sharedEditItem ? "更新" : "追加"}
+            </Button>
+            <Button variant="outline" onClick={() => setSharedModalOpen(false)}>キャンセル</Button>
+          </div>
+          {sharedEditItem && (
+            <div className="border-t pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs justify-start text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={() => handleSharedDelete(sharedEditItem.id)}
+              >
+                <Trash2 className="h-3 w-3 mr-2" />この全員参加予定を削除
+              </Button>
+            </div>
+          )}
+        </div>
       </SimpleModal>
     </div>
   );
