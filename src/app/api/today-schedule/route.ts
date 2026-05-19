@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   const dateLabel = `${year}年${month + 1}月${date}日(${dayOfWeek})`;
 
-  // 今日の予定を取得（statusがscheduledのもののみ）
+  // 今日の個人シフトを取得（statusがscheduledのもののみ）
   const schedules = await prisma.schedule.findMany({
     where: {
       scheduledAt: { gte: todayStart, lt: todayEnd },
@@ -41,8 +41,18 @@ export async function GET(req: NextRequest) {
     orderBy: { scheduledAt: "asc" },
   });
 
+  // 今日の全員参加の予定を取得
+  const sharedEvents = await prisma.sharedEvent.findMany({
+    where: {
+      date: { gte: todayStart, lt: todayEnd },
+    },
+    orderBy: { startTime: "asc" },
+  });
+
+  const totalCount = schedules.length + sharedEvents.length;
+
   // 予定0件の場合
-  if (schedules.length === 0) {
+  if (totalCount === 0) {
     const text = [
       "おはようございます！",
       `📅 ${dateLabel} の予定`,
@@ -58,24 +68,29 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 講師ごとにグループ化
-  const byInstructor: Record<
-    string,
-    { name: string; items: string[] }
-  > = {};
+  // 個人シフトと全員予定を統一形式にマージ
+  type UnifiedItem = {
+    kind: "instructor" | "shared";
+    sortMinutes: number;
+    labelLine: string;
+    detailLine: string;
+  };
+
+  const items: UnifiedItem[] = [];
 
   for (const s of schedules) {
-    if (!byInstructor[s.instructorId]) {
-      byInstructor[s.instructorId] = { name: s.instructor.name, items: [] };
-    }
-
     const cat = getCategoryInfo(s.category);
-    const startStr = new Date(s.scheduledAt).toLocaleTimeString("ja-JP", {
+    const scheduledDate = new Date(s.scheduledAt);
+    const startStr = scheduledDate.toLocaleTimeString("ja-JP", {
       timeZone: "Asia/Tokyo",
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
     });
+
+    // JST時刻から分換算（ソート用）
+    const jstTime = new Date(scheduledDate.getTime() + jstOffset);
+    const sortMinutes = jstTime.getUTCHours() * 60 + jstTime.getUTCMinutes();
 
     let timeStr: string;
     if (s.endAt) {
@@ -90,8 +105,41 @@ export async function GET(req: NextRequest) {
       timeStr = `(${startStr})`;
     }
 
-    byInstructor[s.instructorId].items.push(`  ${cat.label} ${timeStr}`);
+    items.push({
+      kind: "instructor",
+      sortMinutes,
+      labelLine: `👤 ${s.instructor.name}`,
+      detailLine: `  ${cat.label} ${timeStr}`,
+    });
   }
+
+  for (const e of sharedEvents) {
+    let timeStr = "";
+    let sortMinutes = 99999;
+
+    if (e.startTime) {
+      const [h, m] = e.startTime.split(":").map(Number);
+      sortMinutes = h * 60 + m;
+      if (e.endTime) {
+        timeStr = ` (${e.startTime}〜${e.endTime})`;
+      } else {
+        timeStr = ` (${e.startTime})`;
+      }
+    }
+
+    items.push({
+      kind: "shared",
+      sortMinutes,
+      labelLine: "👥 全員",
+      detailLine: `  ${e.title}${timeStr}`,
+    });
+  }
+
+  // sortMinutes昇順、同値なら個人シフト→全員予定の順
+  items.sort((a, b) => {
+    if (a.sortMinutes !== b.sortMinutes) return a.sortMinutes - b.sortMinutes;
+    return a.kind === "instructor" ? -1 : 1;
+  });
 
   // メッセージ組み立て
   const lines: string[] = [
@@ -100,15 +148,13 @@ export async function GET(req: NextRequest) {
     "━━━━━━━━━━━━━━",
   ];
 
-  for (const data of Object.values(byInstructor)) {
-    lines.push(`👤 ${data.name}`);
-    for (const item of data.items) {
-      lines.push(item);
-    }
+  for (const item of items) {
+    lines.push(item.labelLine);
+    lines.push(item.detailLine);
   }
 
   lines.push("━━━━━━━━━━━━━━");
-  lines.push(`合計 ${schedules.length}件`);
+  lines.push(`合計 ${totalCount}件`);
   lines.push("詳細はこちら");
   lines.push("https://app-xi-three-29.vercel.app/");
 
