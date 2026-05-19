@@ -31,22 +31,44 @@ export async function GET(req: NextRequest) {
 
   const dateLabel = `${year}年${month + 1}月${date}日(${dayOfWeek})`;
 
+  // ---------------------------------------------------------------
+  // 【SQLite文字列比較バグの回避策】
+  // SQLite(Turso/libsql)はDateTimeをTEXT型で保存しており、
+  // DB保存形式が "+00:00" サフィックス、Prisma が Date→文字列変換時に
+  // "Z" サフィックスを使うため、文字列のレキシコグラフィック比較で
+  // "+00:00" < "Z" (ASCII順) となり、境界ちょうどのレコードが
+  // WHERE >= から漏れる。
+  // 対策: DBからは前後1日マージン付きで広めに取得し、
+  // JS側で Date.getTime() ミリ秒比較による厳密フィルタを行う。
+  // ---------------------------------------------------------------
+  const marginMs = 24 * 60 * 60 * 1000;
+  const queryStart = new Date(todayStart.getTime() - marginMs);
+  const queryEnd = new Date(todayEnd.getTime() + marginMs);
+
   // 今日の個人シフトを取得（statusがscheduledのもののみ）
-  const schedules = await prisma.schedule.findMany({
+  const schedulesRaw = await prisma.schedule.findMany({
     where: {
-      scheduledAt: { gte: todayStart, lt: todayEnd },
+      scheduledAt: { gte: queryStart, lt: queryEnd },
       status: "scheduled",
     },
     include: { instructor: true },
     orderBy: { scheduledAt: "asc" },
   });
+  const schedules = schedulesRaw.filter((s) => {
+    const t = new Date(s.scheduledAt).getTime();
+    return t >= todayStart.getTime() && t < todayEnd.getTime();
+  });
 
   // 今日の全員参加の予定を取得
-  const sharedEvents = await prisma.sharedEvent.findMany({
+  const sharedEventsRaw = await prisma.sharedEvent.findMany({
     where: {
-      date: { gte: todayStart, lt: todayEnd },
+      date: { gte: queryStart, lt: queryEnd },
     },
     orderBy: { startTime: "asc" },
+  });
+  const sharedEvents = sharedEventsRaw.filter((e) => {
+    const d = new Date(e.date).getTime();
+    return d >= todayStart.getTime() && d < todayEnd.getTime();
   });
 
   const totalCount = schedules.length + sharedEvents.length;
