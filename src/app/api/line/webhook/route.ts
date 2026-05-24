@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -24,6 +25,15 @@ export async function POST(req: NextRequest) {
       console.log("LINE グループID を検出しました:");
       console.log(event.source.groupId);
       console.log("==============================================");
+    }
+
+    // テキストメッセージに「コラム」が含まれていたらコラム投稿ログに記録
+    if (event.type === "message" && event.message?.type === "text") {
+      const text: string = event.message.text || "";
+      if (text.includes("コラム")) {
+        await prisma.columnPostLog.create({ data: {} });
+        console.log("[ColumnPostLog] 記録:", text);
+      }
     }
   }
 

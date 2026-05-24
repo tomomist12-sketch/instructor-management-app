@@ -90,3 +90,12 @@ model NotificationSetting {
 
   @@map("notification_settings")
 }
+
+// コラム投稿完了の記録（LINEで「コラム」を含むメッセージを受信したら1行追加）
+model ColumnPostLog {
+  id       String   @id @default(uuid())
+  postedAt DateTime @default(now()) @map("posted_at")
+
+  @@index([postedAt])
+  @@map("column_post_logs")
+}
