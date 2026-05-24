@@ -102,6 +102,7 @@ export async function GET(req: NextRequest) {
 
   for (const s of schedules) {
     const cat = getCategoryInfo(s.category);
+    const displayLabel = s.category === "custom" && s.title ? s.title : cat.label;
     const scheduledDate = new Date(s.scheduledAt);
     const startStr = scheduledDate.toLocaleTimeString("ja-JP", {
       timeZone: "Asia/Tokyo",
@@ -131,7 +132,7 @@ export async function GET(req: NextRequest) {
       kind: "instructor",
       sortMinutes,
       labelLine: `👤 ${s.instructor.name}`,
-      detailLine: `  ${cat.label} ${timeStr}`,
+      detailLine: `  ${displayLabel} ${timeStr}`,
     });
   }
 

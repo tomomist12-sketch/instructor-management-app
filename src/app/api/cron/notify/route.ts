@@ -45,11 +45,12 @@ export async function GET(req: NextRequest) {
       byInstructor[s.instructorId] = { name: s.instructor.name, items: [] };
     }
     const cat = getCategoryInfo(s.category);
+    const displayLabel = s.category === "custom" && s.title ? s.title : cat.label;
     const startStr = new Date(s.scheduledAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
     const endStr = s.endAt ? new Date(s.endAt).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" }) : "";
     const time = s.endAt ? `${startStr}〜${endStr}` : startStr;
     byInstructor[s.instructorId].items.push(
-      `  ${cat.label}${time ? ` (${time})` : ""}${s.participantName ? ` / ${s.participantName}` : ""}`
+      `  ${displayLabel}${time ? ` (${time})` : ""}${s.participantName ? ` / ${s.participantName}` : ""}`
     );
   }
 
