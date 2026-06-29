@@ -54,14 +54,16 @@ model Schedule {
 
 // 業務別ローテーション設定（初回コンサル・ライン返信など）
 model RotationSetting {
-  id              String @id @default(uuid())
-  category        String @default("first_consult") // first_consult, line_reply
-  dayOfWeek       Int    @map("day_of_week")    // 0=日,1=月,...6=土
-  startTime       String @map("start_time")     // "21:00"（任意）
-  endTime         String @map("end_time")       // "22:00"（任意）
-  instructorOrder String @map("instructor_order") // カンマ区切りの講師ID順
-  startDate       String @map("start_date")     // ローテ開始日
-  weeksToGenerate Int    @default(12) @map("weeks_to_generate")
+  id              String  @id @default(uuid())
+  category        String  @default("first_consult") // first_consult, line_reply
+  dayOfWeek       Int     @map("day_of_week")    // 0=日,1=月,...6=土（主曜日）
+  extraDaysOfWeek String? @map("extra_days_of_week") // 追加曜日のカンマ区切り（例 "3,5"）。なければNULL
+  rotationMode    String  @default("continuous") @map("rotation_mode") // continuous | perDay
+  startTime       String  @map("start_time")     // "21:00"（任意）
+  endTime         String  @map("end_time")       // "22:00"（任意）
+  instructorOrder String  @map("instructor_order") // カンマ区切りの講師ID順
+  startDate       String  @map("start_date")     // ローテ開始日
+  weeksToGenerate Int     @default(12) @map("weeks_to_generate")
 
   @@map("rotation_settings")
 }

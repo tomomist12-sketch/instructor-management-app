@@ -14,6 +14,8 @@ type Setting = {
   id: string;
   category: string;
   dayOfWeek: number;
+  extraDaysOfWeek: string | null;
+  rotationMode: string;
   startTime: string;
   endTime: string;
   instructorOrder: string;
@@ -22,6 +24,7 @@ type Setting = {
 };
 
 const dayNames = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
+const dayShort = ["日", "月", "火", "水", "木", "金", "土"];
 
 type InstructorTime = { id: string; startTime: string; endTime: string };
 
@@ -64,11 +67,32 @@ type Props = {
 };
 
 export function RotationForm({ category, categoryLabel, instructors, existing, defaultStartTime, defaultEndTime, showTime, perInstructorTime = false, note }: Props) {
-  const [dayOfWeek, setDayOfWeek] = useState(existing?.dayOfWeek ?? 0);
+  const initialDays = (() => {
+    if (!existing) return [0];
+    const extras = (existing.extraDaysOfWeek ?? "")
+      .split(",")
+      .map((s) => Number(s))
+      .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+    return [...new Set([existing.dayOfWeek, ...extras])].sort((a, b) => a - b);
+  })();
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>(initialDays);
+  const [rotationMode, setRotationMode] = useState<"continuous" | "perDay">(
+    existing?.rotationMode === "perDay" ? "perDay" : "continuous"
+  );
   const [startTime, setStartTime] = useState(existing?.startTime ?? defaultStartTime);
   const [endTime, setEndTime] = useState(existing?.endTime ?? defaultEndTime);
   const [startDate, setStartDate] = useState(existing?.startDate ?? new Date().toISOString().split("T")[0]);
   const [weeksToGenerate, setWeeksToGenerate] = useState(existing?.weeksToGenerate ?? 12);
+
+  function toggleDay(dow: number) {
+    setDaysOfWeek((prev) => {
+      if (prev.includes(dow)) {
+        if (prev.length === 1) return prev; // 最後の1つは外させない
+        return prev.filter((d) => d !== dow);
+      }
+      return [...prev, dow].sort((a, b) => a - b);
+    });
+  }
 
   const parsed = existing?.instructorOrder ? parseOrder(existing.instructorOrder) : instructors.map((i) => ({ id: i.id, startTime: defaultStartTime, endTime: defaultEndTime }));
   const [order, setOrder] = useState<InstructorTime[]>(parsed);
@@ -96,10 +120,11 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
 
   async function handleSave() {
     if (order.length === 0) { setMessage({ type: "error", text: "講師を1名以上選択してください" }); return; }
+    if (daysOfWeek.length === 0) { setMessage({ type: "error", text: "実施曜日を1つ以上選択してください" }); return; }
     setLoading(true); setMessage(null);
     try {
       const serialized = serializeOrder(order, perInstructorTime);
-      const r = await saveRotationSetting({ id: existing?.id, category, dayOfWeek, startTime, endTime, instructorOrder: serialized, startDate, weeksToGenerate });
+      const r = await saveRotationSetting({ id: existing?.id, category, daysOfWeek, rotationMode, startTime, endTime, instructorOrder: serialized, startDate, weeksToGenerate });
       setMessage({ type: "success", text: `設定を保存し、${r.count}件の予定を生成しました` });
     } catch (e) { setMessage({ type: "error", text: "保存失敗: " + (e instanceof Error ? e.message : "") }); }
     finally { setLoading(false); }
@@ -121,22 +146,35 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
     await deleteRotationSetting(existing.id);
   }
 
-  // プレビュー
-  const previewWeeks = Math.min(weeksToGenerate, 6);
+  // プレビュー（実施スロットを日付順に並べる）
+  const PREVIEW_LIMIT = 6;
   const preview: { date: string; instructor: string; time: string }[] = [];
-  if (order.length > 0) {
+  if (order.length > 0 && daysOfWeek.length > 0) {
+    const sortedDays = [...daysOfWeek].sort((a, b) => a - b);
+    const slots: { date: Date; slotIndex: number }[] = [];
     const start = new Date(startDate);
-    const cur = new Date(start);
-    while (cur.getDay() !== dayOfWeek) cur.setDate(cur.getDate() + 1);
-    for (let i = 0; i < previewWeeks; i++) {
-      const d = new Date(cur); d.setDate(cur.getDate() + i * 7);
-      const item = order[i % order.length];
+    for (let week = 0; week < weeksToGenerate && slots.length < PREVIEW_LIMIT; week++) {
+      for (let di = 0; di < sortedDays.length; di++) {
+        const dow = sortedDays[di];
+        const d = new Date(start);
+        const diff = (dow - d.getDay() + 7) % 7;
+        d.setDate(start.getDate() + diff + week * 7);
+        const slotIndex =
+          rotationMode === "perDay"
+            ? week % order.length
+            : (week * sortedDays.length + di) % order.length;
+        slots.push({ date: d, slotIndex });
+        if (slots.length >= PREVIEW_LIMIT) break;
+      }
+    }
+    for (const s of slots) {
+      const item = order[s.slotIndex];
       const inst = instructors.find((x) => x.id === item.id);
       const time = perInstructorTime
         ? `${item.startTime}〜${item.endTime}`
         : (showTime ? `${startTime}〜${endTime}` : "");
       preview.push({
-        date: d.toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }),
+        date: s.date.toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }),
         instructor: inst?.name || "?",
         time,
       });
@@ -158,11 +196,43 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
             {message.text}
           </div>
         )}
+        <div className="space-y-2">
+          <Label>実施曜日（複数選択可）</Label>
+          <div className="flex flex-wrap gap-1">
+            {dayShort.map((label, i) => {
+              const active = daysOfWeek.includes(i);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => toggleDay(i)}
+                  className={`h-9 w-10 rounded-md border text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-transparent hover:bg-accent"
+                  } ${i === 0 && !active ? "text-red-500" : ""} ${i === 6 && !active ? "text-blue-500" : ""}`}
+                  aria-pressed={active}
+                  aria-label={dayNames[i]}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>実施曜日</Label>
-            <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-              {dayNames.map((n, i) => (<option key={i} value={i}>{n}</option>))}
+            <Label>ローテーションモード</Label>
+            <select
+              value={rotationMode}
+              onChange={(e) => setRotationMode(e.target.value === "perDay" ? "perDay" : "continuous")}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+              disabled={daysOfWeek.length < 2}
+              title={daysOfWeek.length < 2 ? "曜日を2つ以上選ぶと有効になります" : ""}
+            >
+              <option value="continuous">全曜日を跨いで連続ローテ</option>
+              <option value="perDay">曜日ごとに独立ローテ</option>
             </select>
           </div>
           <div className="space-y-2">

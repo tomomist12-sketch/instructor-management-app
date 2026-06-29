@@ -85,14 +85,21 @@ export async function generateLineReplySchedules(weeksToGenerate: number) {
 export async function saveRotationSetting(data: {
   id?: string;
   category: string;
-  dayOfWeek: number;
+  daysOfWeek: number[];
+  rotationMode: "continuous" | "perDay";
   startTime: string;
   endTime: string;
   instructorOrder: string[];
   startDate: string;
   weeksToGenerate: number;
 }) {
+  if (data.daysOfWeek.length === 0) {
+    throw new Error("曜日を1つ以上選択してください");
+  }
   const orderStr = data.instructorOrder.join(",");
+  const sortedDays = [...new Set(data.daysOfWeek)].sort((a, b) => a - b);
+  const [primaryDay, ...extra] = sortedDays;
+  const extraStr = extra.length > 0 ? extra.join(",") : null;
 
   let settingId: string;
   if (data.id) {
@@ -100,7 +107,9 @@ export async function saveRotationSetting(data: {
       where: { id: data.id },
       data: {
         category: data.category,
-        dayOfWeek: data.dayOfWeek,
+        dayOfWeek: primaryDay,
+        extraDaysOfWeek: extraStr,
+        rotationMode: data.rotationMode,
         startTime: data.startTime,
         endTime: data.endTime,
         instructorOrder: orderStr,
@@ -113,7 +122,9 @@ export async function saveRotationSetting(data: {
     const created = await prisma.rotationSetting.create({
       data: {
         category: data.category,
-        dayOfWeek: data.dayOfWeek,
+        dayOfWeek: primaryDay,
+        extraDaysOfWeek: extraStr,
+        rotationMode: data.rotationMode,
         startTime: data.startTime,
         endTime: data.endTime,
         instructorOrder: orderStr,
@@ -171,34 +182,49 @@ export async function generateRotationSchedules(settingId: string) {
   const catInfo = getCategoryInfo(setting.category);
   let count = 0;
 
+  // 主曜日 + 追加曜日をまとめて昇順化（0..6）
+  const extras = (setting.extraDaysOfWeek ?? "")
+    .split(",")
+    .map((s) => Number(s))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+  const days = [...new Set([setting.dayOfWeek, ...extras])].sort((a, b) => a - b);
+
+  // 各 (week, day) で 1 件作成。担当インデックスは rotationMode に応じて算出。
   for (let week = 0; week < setting.weeksToGenerate; week++) {
-    const dateStr = nextDateKeyForWeekday(setting.startDate, setting.dayOfWeek, week);
-    const entry = parsed[week % parsed.length];
-    const hasTime = entry.startTime && entry.startTime !== "" && entry.startTime !== "00:00";
-    const sTime = hasTime ? entry.startTime : "00:00";
-    const eTime = entry.endTime && entry.endTime !== "00:00" ? entry.endTime : "";
+    for (let di = 0; di < days.length; di++) {
+      const dow = days[di];
+      const dateStr = nextDateKeyForWeekday(setting.startDate, dow, week);
+      const slotIndex =
+        setting.rotationMode === "perDay"
+          ? week % parsed.length
+          : (week * days.length + di) % parsed.length;
+      const entry = parsed[slotIndex];
+      const hasTime = entry.startTime && entry.startTime !== "" && entry.startTime !== "00:00";
+      const sTime = hasTime ? entry.startTime : "00:00";
+      const eTime = entry.endTime && entry.endTime !== "00:00" ? entry.endTime : "";
 
-    const scheduledAt = jstDateTime(dateStr, sTime);
+      const scheduledAt = jstDateTime(dateStr, sTime);
 
-    let endAt: Date | null = null;
-    if (eTime) {
-      endAt = jstDateTime(dateStr, eTime);
+      let endAt: Date | null = null;
+      if (eTime) {
+        endAt = jstDateTime(dateStr, eTime);
+      }
+
+      await prisma.schedule.create({
+        data: {
+          category: setting.category,
+          title: catInfo.label,
+          instructorId: entry.instructorId,
+          scheduledAt,
+          endAt,
+          status: "scheduled",
+          isRecurring: true,
+          recurrenceRule: "weekly",
+          recurrenceGroupId: `rotation_${settingId}_${groupId}`,
+        },
+      });
+      count++;
     }
-
-    await prisma.schedule.create({
-      data: {
-        category: setting.category,
-        title: catInfo.label,
-        instructorId: entry.instructorId,
-        scheduledAt,
-        endAt,
-        status: "scheduled",
-        isRecurring: true,
-        recurrenceRule: "weekly",
-        recurrenceGroupId: `rotation_${settingId}_${groupId}`,
-      },
-    });
-    count++;
   }
 
   revalidatePath("/rotation");
