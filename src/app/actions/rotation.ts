@@ -86,7 +86,7 @@ export async function saveRotationSetting(data: {
   id?: string;
   category: string;
   daysOfWeek: number[];
-  rotationMode: "continuous" | "perDay";
+  rotationMode: "continuous" | "perDay" | "perDayFixed";
   startTime: string;
   endTime: string;
   instructorOrder: string[];
@@ -194,10 +194,15 @@ export async function generateRotationSchedules(settingId: string) {
     for (let di = 0; di < days.length; di++) {
       const dow = days[di];
       const dateStr = nextDateKeyForWeekday(setting.startDate, dow, week);
-      const slotIndex =
-        setting.rotationMode === "perDay"
-          ? week % parsed.length
-          : (week * days.length + di) % parsed.length;
+      let slotIndex: number;
+      if (setting.rotationMode === "perDayFixed") {
+        // 曜日ごとに固定担当（ローテなし）: i 番目の曜日 → i 番目の講師
+        slotIndex = di % parsed.length;
+      } else if (setting.rotationMode === "perDay") {
+        slotIndex = week % parsed.length;
+      } else {
+        slotIndex = (week * days.length + di) % parsed.length;
+      }
       const entry = parsed[slotIndex];
       const hasTime = entry.startTime && entry.startTime !== "" && entry.startTime !== "00:00";
       const sTime = hasTime ? entry.startTime : "00:00";

@@ -76,9 +76,13 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
     return [...new Set([existing.dayOfWeek, ...extras])].sort((a, b) => a - b);
   })();
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(initialDays);
-  const [rotationMode, setRotationMode] = useState<"continuous" | "perDay">(
-    existing?.rotationMode === "perDay" ? "perDay" : "continuous"
-  );
+  const initialMode: "continuous" | "perDay" | "perDayFixed" =
+    existing?.rotationMode === "perDay"
+      ? "perDay"
+      : existing?.rotationMode === "perDayFixed"
+        ? "perDayFixed"
+        : "continuous";
+  const [rotationMode, setRotationMode] = useState<"continuous" | "perDay" | "perDayFixed">(initialMode);
   const [startTime, setStartTime] = useState(existing?.startTime ?? defaultStartTime);
   const [endTime, setEndTime] = useState(existing?.endTime ?? defaultEndTime);
   const [startDate, setStartDate] = useState(existing?.startDate ?? new Date().toISOString().split("T")[0]);
@@ -88,14 +92,47 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
     setDaysOfWeek((prev) => {
       if (prev.includes(dow)) {
         if (prev.length === 1) return prev; // 最後の1つは外させない
+        // 担当割当からも削除
+        setDayAssignments((m) => {
+          const n = { ...m };
+          delete n[dow];
+          return n;
+        });
         return prev.filter((d) => d !== dow);
       }
+      // 追加曜日には先頭講師をデフォルト割当
+      setDayAssignments((m) => {
+        if (m[dow]) return m;
+        const fallback = instructors[0]?.id;
+        return fallback ? { ...m, [dow]: fallback } : m;
+      });
       return [...prev, dow].sort((a, b) => a - b);
     });
   }
 
   const parsed = existing?.instructorOrder ? parseOrder(existing.instructorOrder) : instructors.map((i) => ({ id: i.id, startTime: defaultStartTime, endTime: defaultEndTime }));
   const [order, setOrder] = useState<InstructorTime[]>(parsed);
+
+  // 曜日ごとに固定担当（perDayFixed）モード用: 曜日 → 講師ID
+  const initialDayAssignments = (() => {
+    const map: Record<number, string> = {};
+    const sortedInit = [...initialDays].sort((a, b) => a - b);
+    if (existing?.rotationMode === "perDayFixed" && parsed.length > 0) {
+      sortedInit.forEach((dow, i) => {
+        const item = parsed[i] ?? parsed[parsed.length - 1];
+        if (item) map[dow] = item.id;
+      });
+    } else {
+      const fallback = instructors[0]?.id;
+      if (fallback) sortedInit.forEach((dow) => { map[dow] = fallback; });
+    }
+    return map;
+  })();
+  const [dayAssignments, setDayAssignments] = useState<Record<number, string>>(initialDayAssignments);
+
+  function setDayInstructor(dow: number, instructorId: string) {
+    setDayAssignments((prev) => ({ ...prev, [dow]: instructorId }));
+  }
 
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -119,11 +156,22 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
   }
 
   async function handleSave() {
-    if (order.length === 0) { setMessage({ type: "error", text: "講師を1名以上選択してください" }); return; }
     if (daysOfWeek.length === 0) { setMessage({ type: "error", text: "実施曜日を1つ以上選択してください" }); return; }
     setLoading(true); setMessage(null);
     try {
-      const serialized = serializeOrder(order, perInstructorTime);
+      let serialized: string[];
+      if (rotationMode === "perDayFixed") {
+        const sortedDays = [...daysOfWeek].sort((a, b) => a - b);
+        const items: InstructorTime[] = sortedDays.map((dow) => {
+          const id = dayAssignments[dow] ?? instructors[0]?.id;
+          if (!id) throw new Error("各曜日に担当者を割り当ててください");
+          return { id, startTime: defaultStartTime, endTime: defaultEndTime };
+        });
+        serialized = serializeOrder(items, perInstructorTime);
+      } else {
+        if (order.length === 0) { setMessage({ type: "error", text: "講師を1名以上選択してください" }); setLoading(false); return; }
+        serialized = serializeOrder(order, perInstructorTime);
+      }
       const r = await saveRotationSetting({ id: existing?.id, category, daysOfWeek, rotationMode, startTime, endTime, instructorOrder: serialized, startDate, weeksToGenerate });
       setMessage({ type: "success", text: `設定を保存し、${r.count}件の予定を生成しました` });
     } catch (e) { setMessage({ type: "error", text: "保存失敗: " + (e instanceof Error ? e.message : "") }); }
@@ -149,9 +197,10 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
   // プレビュー（実施スロットを日付順に並べる）
   const PREVIEW_LIMIT = 6;
   const preview: { date: string; instructor: string; time: string }[] = [];
-  if (order.length > 0 && daysOfWeek.length > 0) {
+  const hasPool = rotationMode === "perDayFixed" ? Object.keys(dayAssignments).length > 0 : order.length > 0;
+  if (hasPool && daysOfWeek.length > 0) {
     const sortedDays = [...daysOfWeek].sort((a, b) => a - b);
-    const slots: { date: Date; slotIndex: number }[] = [];
+    const slots: { date: Date; instructorId: string; item?: InstructorTime }[] = [];
     const start = new Date(startDate);
     for (let week = 0; week < weeksToGenerate && slots.length < PREVIEW_LIMIT; week++) {
       for (let di = 0; di < sortedDays.length; di++) {
@@ -159,19 +208,26 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
         const d = new Date(start);
         const diff = (dow - d.getDay() + 7) % 7;
         d.setDate(start.getDate() + diff + week * 7);
-        const slotIndex =
-          rotationMode === "perDay"
-            ? week % order.length
-            : (week * sortedDays.length + di) % order.length;
-        slots.push({ date: d, slotIndex });
+        let instructorId = "";
+        let item: InstructorTime | undefined;
+        if (rotationMode === "perDayFixed") {
+          instructorId = dayAssignments[dow] ?? "";
+        } else {
+          const idx =
+            rotationMode === "perDay"
+              ? week % order.length
+              : (week * sortedDays.length + di) % order.length;
+          item = order[idx];
+          instructorId = item?.id ?? "";
+        }
+        slots.push({ date: d, instructorId, item });
         if (slots.length >= PREVIEW_LIMIT) break;
       }
     }
     for (const s of slots) {
-      const item = order[s.slotIndex];
-      const inst = instructors.find((x) => x.id === item.id);
-      const time = perInstructorTime
-        ? `${item.startTime}〜${item.endTime}`
+      const inst = instructors.find((x) => x.id === s.instructorId);
+      const time = perInstructorTime && s.item
+        ? `${s.item.startTime}〜${s.item.endTime}`
         : (showTime ? `${startTime}〜${endTime}` : "");
       preview.push({
         date: s.date.toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }),
@@ -226,13 +282,15 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
             <Label>ローテーションモード</Label>
             <select
               value={rotationMode}
-              onChange={(e) => setRotationMode(e.target.value === "perDay" ? "perDay" : "continuous")}
+              onChange={(e) => {
+                const v = e.target.value;
+                setRotationMode(v === "perDay" ? "perDay" : v === "perDayFixed" ? "perDayFixed" : "continuous");
+              }}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-              disabled={daysOfWeek.length < 2}
-              title={daysOfWeek.length < 2 ? "曜日を2つ以上選ぶと有効になります" : ""}
             >
               <option value="continuous">全曜日を跨いで連続ローテ</option>
               <option value="perDay">曜日ごとに独立ローテ</option>
+              <option value="perDayFixed">曜日ごとに固定担当（ローテなし）</option>
             </select>
           </div>
           <div className="space-y-2">
@@ -251,7 +309,31 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </div>
 
-        {/* 担当順 */}
+        {/* 担当 */}
+        {rotationMode === "perDayFixed" ? (
+          <div className="space-y-2">
+            <Label>曜日ごとの担当（毎週固定）</Label>
+            <div className="space-y-1">
+              {[...daysOfWeek].sort((a, b) => a - b).map((dow) => (
+                <div key={dow} className="flex items-center gap-2 rounded-md border p-2">
+                  <span className={`text-sm font-medium w-12 shrink-0 ${dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-500" : ""}`}>
+                    {dayShort[dow]}曜日
+                  </span>
+                  <select
+                    value={dayAssignments[dow] ?? ""}
+                    onChange={(e) => setDayInstructor(dow, e.target.value)}
+                    className="flex h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                  >
+                    <option value="" disabled>担当者を選択</option>
+                    {instructors.map((inst) => (
+                      <option key={inst.id} value={inst.id}>{inst.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
         <div className="space-y-2">
           <Label>担当順（上から順にローテーション）</Label>
           <div className="space-y-1">
@@ -286,6 +368,7 @@ export function RotationForm({ category, categoryLabel, instructors, existing, d
             </div>
           )}
         </div>
+        )}
 
         <div className="flex gap-2">
           <Button onClick={handleSave} disabled={loading} className="flex-1">{loading ? "保存中..." : "設定を保存"}</Button>
