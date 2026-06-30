@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
   if (totalCount === 0) {
     const text = [
       "おはようございます！",
-      `📅 ${dateLabel} の予定`,
+      `${dateLabel} の予定`,
       "━━━━━━━━━━━━━━",
       "本日の予定はありません",
       "━━━━━━━━━━━━━━",
@@ -124,6 +124,8 @@ export async function GET(req: NextRequest) {
         hour12: false,
       });
       timeStr = `(${startStr}〜${endStr})`;
+    } else if (startStr === "00:00") {
+      timeStr = "";
     } else {
       timeStr = `(${startStr})`;
     }
@@ -132,7 +134,7 @@ export async function GET(req: NextRequest) {
       kind: "instructor",
       sortMinutes,
       labelLine: `👤 ${s.instructor.name}`,
-      detailLine: `  ${displayLabel} ${timeStr}`,
+      detailLine: `  ${displayLabel}${timeStr ? ` ${timeStr}` : ""}`,
     });
   }
 
@@ -167,7 +169,7 @@ export async function GET(req: NextRequest) {
   // メッセージ組み立て
   const lines: string[] = [
     "おはようございます！",
-    `📅 ${dateLabel} の予定`,
+    `${dateLabel} の予定`,
     "━━━━━━━━━━━━━━",
   ];
 
