@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { fetchCalendarEvents } from "@/lib/google-calendar";
+import {
+  pickSlotForEvent,
+  parseApplicants,
+  buildConsultMemo,
+  type SlotCandidate,
+} from "@/lib/consult-match";
 
 export const dynamic = "force-dynamic";
 
@@ -36,109 +42,98 @@ export async function GET(req: NextRequest) {
       return s.includes("コンサル") || s.includes("consult") || s.includes("初回");
     });
 
-    // 講師リストを取得（マッチング用）
-    const instructors = await prisma.instructor.findMany();
+    // 講師リスト（createdAt昇順）。フォールバック先は先頭講師。
+    const instructors = await prisma.instructor.findMany({ orderBy: { createdAt: "asc" } });
+    const defaultInstructorId = instructors[0]?.id;
 
-    let created = 0;
-    let skipped = 0;
+    // マッチング用に、対象期間の初回コンサル予定を一括ロード（TZ端対策で前後1日パディング）
+    const DAY = 24 * 60 * 60 * 1000;
+    const existingConsults = await prisma.schedule.findMany({
+      where: {
+        category: "first_consult",
+        scheduledAt: { gte: new Date(timeMin.getTime() - DAY), lt: new Date(timeMax.getTime() + DAY) },
+      },
+    });
+
+    const toCandidate = (s: (typeof existingConsults)[number]): SlotCandidate => ({
+      id: s.id,
+      instructorId: s.instructorId,
+      scheduledAt: s.scheduledAt,
+      hasGcalLink: !!s.memo && s.memo.includes("gcal:"),
+      status: s.status,
+    });
+
+    // このrunで消費済みの枠ID（同日に複数イベントがある場合の取り合いを防ぐ）
+    const usedSlotIds = new Set<string>();
+
+    let created = 0; // 事前枠が無く、デフォルト講師(関)に新規作成
+    let merged = 0; // 事前に置かれた講師枠へ統合
+    let updated = 0; // 既に紐付け済みの予定を最新化
+    let duplicatesRemoved = 0; // 統合に伴い削除した重複予定
 
     for (const event of consultEvents) {
-      // 既にGoogleカレンダーIDで同期済みかチェック
-      const existing = await prisma.schedule.findFirst({
-        where: { memo: { contains: `gcal:${event.id}` } },
-      });
-
-      if (existing) {
-        // 既存予定の参加者名・メモ・URLを常に最新に更新
-        const desc = event.description || "";
-        const updNames: string[] = [];
-        const updEmails: string[] = [];
-        for (const line of desc.split("\n")) {
-          const nm = line.match(/お名前[：:]\s*(.+)/);
-          if (nm) updNames.push(nm[1].trim());
-          const em = line.match(/メール(?:アドレス)?[：:]\s*(\S+)/);
-          if (em) updEmails.push(em[1].trim());
-        }
-        const updUrl = event.location || null;
-        let updMemo = `gcal:${event.id}`;
-        if (updUrl) updMemo += `\n🔗 ${updUrl}`;
-        if (updNames.length > 0) {
-          updMemo += "\n【申込者】";
-          for (let i = 0; i < updNames.length; i++) {
-            updMemo += `\n${updNames[i]}`;
-            if (updEmails[i]) updMemo += `\n  📧 ${updEmails[i]}`;
-          }
-        }
-        await prisma.schedule.update({
-          where: { id: existing.id },
-          data: {
-            participantName: updNames.length > 0 ? updNames.join("、") : existing.participantName,
-            memo: updMemo,
-          },
-        });
-        skipped++;
-        continue;
-      }
-
-      // イベントの説明や担当者名から講師をマッチング
-      let instructorId = instructors[0]?.id; // デフォルト: 最初の講師
-      for (const inst of instructors) {
-        if (
-          event.summary.includes(inst.name) ||
-          (event.description && event.description.includes(inst.name))
-        ) {
-          instructorId = inst.id;
-          break;
-        }
-      }
-
-      if (!instructorId) continue;
-
-      // 説明欄から申込者情報を抽出
-      const desc = event.description || "";
-      const names: string[] = [];
-      const emails: string[] = [];
-      for (const line of desc.split("\n")) {
-        const nameMatch = line.match(/お名前[：:]\s*(.+)/);
-        if (nameMatch) names.push(nameMatch[1].trim());
-        // 「メールアドレス：」にも対応
-        const emailMatch = line.match(/メール(?:アドレス)?[：:]\s*(\S+)/);
-        if (emailMatch) emails.push(emailMatch[1].trim());
-      }
-      const participantName = names.length > 0 ? names.join("、") : null;
-
-      // URL（Zoom等）を取得
-      const url = event.location || null;
-
-      // メモに申込者情報・メール・URLを整形
-      let memoText = `gcal:${event.id}`;
-      if (url) {
-        memoText += `\n🔗 ${url}`;
-      }
-      if (names.length > 0) {
-        memoText += "\n【申込者】";
-        for (let i = 0; i < names.length; i++) {
-          memoText += `\n${names[i]}`;
-          if (emails[i]) memoText += `\n  📧 ${emails[i]}`;
-        }
-      }
-
       const scheduledAt = new Date(event.start);
       const endAt = event.end ? new Date(event.end) : null;
 
-      await prisma.schedule.create({
-        data: {
-          category: "first_consult",
-          title: event.summary,
-          instructorId,
-          participantName,
-          scheduledAt,
-          endAt,
-          memo: memoText,
-          status: "scheduled",
-        },
-      });
-      created++;
+      const { names, emails } = parseApplicants(event.description);
+      const participantName = names.length > 0 ? names.join("、") : null;
+      const url = event.location || null;
+      const memoText = buildConsultMemo(event.id, url, names, emails);
+
+      // このイベントに既に紐付いている予定（あれば）
+      const linked = existingConsults.find(
+        (s) => !!s.memo && s.memo.includes(`gcal:${event.id}`)
+      );
+
+      // 事前に講師へ置かれた空きコンサル枠を探す（同じ日・最も近い時刻）
+      const slot = pickSlotForEvent(scheduledAt, existingConsults.map(toCandidate), usedSlotIds);
+
+      if (slot) {
+        // Case A: 事前枠へ統合。枠の講師は維持し、申込者情報・時刻・gcalリンクを書き込む。
+        usedSlotIds.add(slot.id);
+        await prisma.schedule.update({
+          where: { id: slot.id },
+          data: {
+            participantName: participantName ?? undefined,
+            scheduledAt,
+            endAt,
+            memo: memoText,
+            status: "scheduled",
+          },
+        });
+        // 以前のデフォルト(関)への重複同期が残っていれば削除して統合
+        if (linked && linked.id !== slot.id) {
+          await prisma.schedule.delete({ where: { id: linked.id } });
+          duplicatesRemoved++;
+        }
+        merged++;
+      } else if (linked) {
+        // Case B: 事前枠は無いが既に紐付け済み → 参加者名・メモを最新化（講師・時刻は維持）
+        await prisma.schedule.update({
+          where: { id: linked.id },
+          data: {
+            participantName: participantName ?? linked.participantName,
+            memo: memoText,
+          },
+        });
+        updated++;
+      } else {
+        // Case C: 事前枠も紐付けも無い → デフォルト講師(関)に新規作成（後で手動移動可）
+        if (!defaultInstructorId) continue;
+        await prisma.schedule.create({
+          data: {
+            category: "first_consult",
+            title: event.summary,
+            instructorId: defaultInstructorId,
+            participantName,
+            scheduledAt,
+            endAt,
+            memo: memoText,
+            status: "scheduled",
+          },
+        });
+        created++;
+      }
     }
 
     return NextResponse.json({
@@ -146,7 +141,11 @@ export async function GET(req: NextRequest) {
       total: events.length,
       consultEvents: consultEvents.length,
       created,
-      skipped,
+      merged,
+      updated,
+      duplicatesRemoved,
+      // 後方互換（旧UI）: 追加以外はまとめて skipped 扱い
+      skipped: merged + updated,
     });
   } catch (e) {
     console.error("Calendar sync error:", e);

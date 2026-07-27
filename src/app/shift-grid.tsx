@@ -530,7 +530,7 @@ export function ShiftGrid({ instructors, schedules, sharedEvents }: Props) {
                 const res = await fetch("/api/cron/sync-calendar?manual=1");
                 const data = await res.json();
                 if (data.ok) {
-                  alert(`Googleカレンダー同期完了：${data.created}件追加（${data.skipped}件スキップ）`);
+                  alert(`Googleカレンダー同期完了：新規${data.created}件 / 講師枠へ統合${data.merged}件 / 更新${data.updated}件`);
                   window.location.reload();
                 } else {
                   alert("同期エラー: " + (data.error || "不明"));
