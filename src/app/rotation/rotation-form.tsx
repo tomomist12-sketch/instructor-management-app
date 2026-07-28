@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { saveRotationSetting, deleteRotationSetting, generateRotationSchedules } from "@/app/actions/rotation";
 import { Trash2, Play, GripVertical } from "lucide-react";
 import { getCategoryInfo } from "@/lib/categories";
+import { expandWeekdays } from "@/lib/rotation-days";
 
 type Instructor = { id: string; name: string };
 type Setting = {
@@ -67,14 +68,9 @@ type Props = {
 };
 
 export function RotationForm({ category, categoryLabel, instructors, existing, defaultStartTime, defaultEndTime, showTime, perInstructorTime = false, note }: Props) {
-  const initialDays = (() => {
-    if (!existing) return [0];
-    const extras = (existing.extraDaysOfWeek ?? "")
-      .split(",")
-      .map((s) => Number(s))
-      .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
-    return [...new Set([existing.dayOfWeek, ...extras])].sort((a, b) => a - b);
-  })();
+  const initialDays = existing
+    ? expandWeekdays(existing.dayOfWeek, existing.extraDaysOfWeek)
+    : [0];
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(initialDays);
   const initialMode: "continuous" | "perDay" | "perDayFixed" =
     existing?.rotationMode === "perDay"

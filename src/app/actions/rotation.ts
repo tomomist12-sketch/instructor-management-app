@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { getCategoryInfo } from "@/lib/categories";
 import { jstDateTime, nextDateKeyForWeekday, todayJstDateKey } from "@/lib/jst-date";
+import { expandWeekdays } from "@/lib/rotation-days";
 
 // ライン返信: 曜日ごとの固定担当を保存（保存後に自動で予定を再生成）
 export async function saveLineReplySettings(settings: { dayOfWeek: number; instructorId: string }[], weeksToGenerate: number = 12) {
@@ -182,12 +183,8 @@ export async function generateRotationSchedules(settingId: string) {
   const catInfo = getCategoryInfo(setting.category);
   let count = 0;
 
-  // 主曜日 + 追加曜日をまとめて昇順化（0..6）
-  const extras = (setting.extraDaysOfWeek ?? "")
-    .split(",")
-    .map((s) => Number(s))
-    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
-  const days = [...new Set([setting.dayOfWeek, ...extras])].sort((a, b) => a - b);
+  // 主曜日 + 追加曜日を実施曜日に展開（空文字→日曜混入バグを防ぐ）
+  const days = expandWeekdays(setting.dayOfWeek, setting.extraDaysOfWeek);
 
   // 各 (week, day) で 1 件作成。担当インデックスは rotationMode に応じて算出。
   for (let week = 0; week < setting.weeksToGenerate; week++) {
