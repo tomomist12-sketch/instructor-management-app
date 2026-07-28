@@ -37,6 +37,8 @@ export default async function HomePage() {
     title: e.title,
     note: e.note,
     createdByName: e.createdByName,
+    isRecurring: e.isRecurring,
+    recurrenceGroupId: e.recurrenceGroupId,
   }));
 
   return (

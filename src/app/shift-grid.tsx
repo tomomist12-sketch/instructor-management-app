@@ -4,7 +4,10 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { getCategoryInfo, CATEGORY_OPTIONS } from "@/lib/categories";
 import { createSchedule, deleteSchedule, deleteRecurrenceGroup, deleteRecurrenceFromDate, notifySchedule, updateSchedule } from "@/app/actions/schedules";
-import { createSharedEvent, updateSharedEvent, deleteSharedEvent } from "@/app/actions/shared-events";
+import {
+  createSharedEvent, updateSharedEvent, deleteSharedEvent,
+  deleteSharedRecurrenceGroup, deleteSharedRecurrenceFromDate,
+} from "@/app/actions/shared-events";
 import { SimpleModal } from "@/components/simple-modal";
 import { CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Send, Repeat, X, Users } from "lucide-react";
 
@@ -32,6 +35,8 @@ type SharedEvent = {
   title: string;
   note: string | null;
   createdByName: string | null;
+  isRecurring: boolean;
+  recurrenceGroupId: string | null;
 };
 
 type Props = {
@@ -273,6 +278,8 @@ export function ShiftGrid({ instructors, schedules, sharedEvents }: Props) {
   const [sharedStartTime, setSharedStartTime] = useState("");
   const [sharedEndTime, setSharedEndTime] = useState("");
   const [sharedNote, setSharedNote] = useState("");
+  const [sharedRepeat, setSharedRepeat] = useState("none");
+  const [sharedRepeatCount, setSharedRepeatCount] = useState(4);
   const [sharedLoading, setSharedLoading] = useState(false);
 
   const dates = useMemo(() => getGridDates(baseDate, view), [baseDate, view]);
@@ -308,6 +315,8 @@ export function ShiftGrid({ instructors, schedules, sharedEvents }: Props) {
     setSharedStartTime("");
     setSharedEndTime("");
     setSharedNote("");
+    setSharedRepeat("none");
+    setSharedRepeatCount(4);
     setSharedModalOpen(true);
   }
 
@@ -335,6 +344,8 @@ export function ShiftGrid({ instructors, schedules, sharedEvents }: Props) {
         await updateSharedEvent(sharedEditItem.id, fd);
       } else {
         fd.set("createdByName", "");
+        fd.set("repeat", sharedRepeat);
+        fd.set("repeatCount", String(sharedRepeatCount));
         await createSharedEvent(fd);
       }
       setSharedModalOpen(false);
@@ -601,6 +612,7 @@ export function ShiftGrid({ instructors, schedules, sharedEvents }: Props) {
                           >
                             <Users className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
                             <span className="truncate">{ev.title}</span>
+                            {ev.isRecurring && <Repeat className="h-3 w-3 shrink-0 text-indigo-400" />}
                             {(ev.startTime || ev.endTime) && (
                               <span className="ml-auto shrink-0 text-xs font-normal text-indigo-600">
                                 {ev.startTime || ""}{ev.startTime && ev.endTime ? "〜" : ""}{ev.endTime || ""}
@@ -811,6 +823,39 @@ export function ShiftGrid({ instructors, schedules, sharedEvents }: Props) {
             <label className="text-sm font-medium">メモ</label>
             <textarea value={sharedNote} onChange={(e) => setSharedNote(e.target.value)} rows={3} placeholder="任意のメモ" className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" />
           </div>
+          {!sharedEditItem && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">繰り返し</label>
+              <div className="flex gap-2">
+                <select
+                  value={sharedRepeat}
+                  onChange={(e) => setSharedRepeat(e.target.value)}
+                  className="flex h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                >
+                  <option value="none">なし</option>
+                  <option value="weekly">毎週</option>
+                  <option value="biweekly">隔週</option>
+                  <option value="monthly">毎月</option>
+                </select>
+                {sharedRepeat !== "none" && (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number" min={2} max={52}
+                      value={sharedRepeatCount}
+                      onChange={(e) => setSharedRepeatCount(Math.max(2, parseInt(e.target.value || "2", 10)))}
+                      className="h-9 w-16 rounded-md border border-input bg-transparent px-2 py-1 text-sm"
+                    />
+                    <span className="text-sm text-muted-foreground">回</span>
+                  </div>
+                )}
+              </div>
+              {sharedRepeat !== "none" && (
+                <p className="text-xs text-muted-foreground">
+                  {sharedRepeatCount}回分の予定をまとめて作成します。
+                </p>
+              )}
+            </div>
+          )}
           <div className="flex gap-2">
             <Button onClick={handleSharedSave} disabled={sharedLoading || !sharedTitle.trim() || !sharedDate} className="flex-1">
               {sharedLoading ? "保存中..." : sharedEditItem ? "更新" : "追加"}
@@ -818,15 +863,44 @@ export function ShiftGrid({ instructors, schedules, sharedEvents }: Props) {
             <Button variant="outline" onClick={() => setSharedModalOpen(false)}>キャンセル</Button>
           </div>
           {sharedEditItem && (
-            <div className="border-t pt-3">
+            <div className="border-t pt-3 space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">削除</p>
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs justify-start text-destructive border-destructive/30 hover:bg-destructive/10"
+                className="w-full text-xs justify-start text-destructive border-destructive/30 hover:bg-destructive/10"
                 onClick={() => handleSharedDelete(sharedEditItem.id)}
               >
-                <Trash2 className="h-3 w-3 mr-2" />この全員参加予定を削除
+                <Trash2 className="h-3 w-3 mr-2" />この予定だけ削除
               </Button>
+              {sharedEditItem.isRecurring && sharedEditItem.recurrenceGroupId && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs justify-start text-destructive border-destructive/30 hover:bg-destructive/10"
+                    onClick={async () => {
+                      if (!confirm("この日以降の同じ繰り返し予定を全て削除しますか？")) return;
+                      await deleteSharedRecurrenceFromDate(sharedEditItem.recurrenceGroupId!, sharedEditItem.date);
+                      setSharedModalOpen(false);
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3 mr-2" />これ以降の予定を全て削除
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs justify-start text-destructive border-destructive/30 hover:bg-destructive/10"
+                    onClick={async () => {
+                      if (!confirm("この繰り返し予定を全て（過去分も含めて）削除しますか？")) return;
+                      await deleteSharedRecurrenceGroup(sharedEditItem.recurrenceGroupId!);
+                      setSharedModalOpen(false);
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3 mr-2" />全ての繰り返し予定を削除
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
