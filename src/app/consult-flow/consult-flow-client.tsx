@@ -216,7 +216,10 @@ https://utage-system.com/line/open/46ScnLOVx1Zu
 また、ZOOMでもお伝えさせていただいた通り、初回コンサルの感想と今後の意気込みを、以下のLINEグループに投稿していただきたいです！
 
 オープンチャット「🌏物販ONE【ebay部門】」
-https://line.me/ti/g2/TlyaNUZzHg-n2TZOpOhN0v1-pW2yQQnljdLkUQ?utm_source=invitation&utm_medium=link_copy&utm_campaign=default`}
+https://line.me/ti/g2/TlyaNUZzHg-n2TZOpOhN0v1-pW2yQQnljdLkUQ?utm_source=invitation&utm_medium=link_copy&utm_campaign=default
+
+オープンチャット「【全体】ONE全体グループ」
+https://line.me/ti/g2/vJvvPCNqAD5r2ckFHRl0xEFXNmFvNOk-8y5SnA?utm_source=invitation&utm_medium=link_copy&utm_campaign=default`}
             />
             <div className="pt-2">
               <p className="text-xs font-medium text-muted-foreground mb-1">特典資料</p>
